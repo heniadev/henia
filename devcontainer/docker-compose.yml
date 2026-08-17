@@ -1,0 +1,34 @@
+# Local Postgres for the devcontainer to develop/test against before
+# commits. Not part of the deployed app — see devcontainer/README.md
+# "Local database" for how this fits together with run.sh.
+#
+# Joins the *existing* user-defined network run.sh already creates
+# (henia-devcontainer-net), rather than letting compose create its
+# own — so the devcontainer (started separately via `docker run`, not
+# compose) can reach this service by name without any extra wiring beyond
+# the network attachment it already has.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: henia_dev
+    volumes:
+      - henia-devcontainer-pgdata:/var/lib/postgresql/data
+    networks:
+      - henia-devcontainer-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d henia_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    # No `ports:` — only reachable from inside henia-devcontainer-net
+    # (i.e. the devcontainer itself). The host never needs direct access.
+
+networks:
+  henia-devcontainer-net:
+    external: true
+
+volumes:
+  henia-devcontainer-pgdata:
