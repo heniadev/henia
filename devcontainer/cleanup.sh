@@ -77,7 +77,7 @@ remove_instance() {
     esac
   fi
 
-  local volume="str8t-devcontainer-home-${name}"
+  local volume="henia-devcontainer-home-${name}"
   if docker volume inspect "$volume" >/dev/null 2>&1; then
     docker volume rm "$volume" >&2
     echo "Removed volume '${volume}'." >&2
@@ -91,7 +91,7 @@ remove_instance() {
     # SQL-safety here depends entirely on name already having passed the
     # ^[a-z][a-z0-9-]*$ check above (no quotes/semicolons possible) — see
     # run.sh's matching validation and its SAFETY INVARIANT note.
-    docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d str8t_dev \
+    docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d henia_dev \
       -c "DROP DATABASE IF EXISTS \"${name}\"" >&2
     echo "Dropped database '${name}' (if it existed)." >&2
   else

@@ -1,6 +1,6 @@
 # JOURNEY
 
-Append-only engineering log for str8t. Raw material for two things: the
+Append-only engineering log for Henia. Raw material for two things: the
 `/101-lesson` rules in `context/foundation/lessons.md`, and the
 post-mortem-style talk described in `content/CFP.md`.
 
@@ -177,3 +177,81 @@ were asked:
 state, ask which phase each safety control actually protects. Controls
 inherited from the phase with a human in the loop are the ones most likely
 to be load-bearing, untested, and wrong in the phase without one.
+
+## 2026-08-17 — A man. An agent. A canal Panama.
+
+**Context** — mid-shaping, Phase 3. Recorded at the user's request, in
+their words:
+
+> A man. An agent. A canal Panama.
+>
+> If you want to embark on this journey, expect you will be working harder
+> than ever. Agents shorten loops. SDD requires a lot of analytical work.
+> Consider shortening your work week to 20 hours. You will work a lot
+> faster anyway.
+
+**Friction** — the promise of agentic development is read as *less work*.
+It is not. The agent collapses the implementation loop, which does not
+remove the work — it moves the bottleneck upstream, into analysis, framing
+and specification, where no loop is shortened and where the thinking is
+the deliverable. That is denser, more tiring work than writing code, and
+it arrives without the natural pauses that compiling, waiting and debugging
+used to provide. The advice to cut to a 20-hour week is not a lifestyle
+aside; it is a throughput observation about what the remaining work
+actually is.
+
+**Resolution** — recorded as a standing constraint on how this project is
+run, not as a task.
+
+**Lesson candidate** — when a tool removes the slow part of a job, the
+job becomes the fast part, continuously. Budget for cognitive endurance,
+not for hours. Plan the week around how much careful thinking is
+sustainable, not around how much output the agent can absorb.
+
+## 2026-08-17 — str8t becomes Henia; the collision a domain search cannot find
+
+**Context** — mid-shaping, the project was renamed to fit the CNCF
+convention of Greek names. First candidate: *Kineton*.
+
+**Friction** — Kineton failed, and the decisive reason was invisible to
+every check normally run on a name. Namespaces were mostly free: npm, PyPI
+and two domains were available. What killed it was **phonetics against the
+landscape we are integrating with**. Tekton — Greek τέκτων, "builder" — is
+an established CD Foundation project *and one of our own MVP providers*.
+A project called Kineton would ship documentation reading "Kineton
+integrates with Tekton", spoken aloud from a conference stage in October,
+one consonant apart, same Greek-noun register, same problem space. Two
+live companies also occupy the name, one of them (kineton.io) selling
+"distributed orchestration" for "every machine and every agent" — a direct
+adjacency.
+
+Henia (ἡνία, "the reins") came back clean on every axis: npm, PyPI,
+crates.io, `.io`/`.dev`/`.sh`/`.net`, no commercial technology use, and no
+phonetic neighbour anywhere in the CNCF or CD Foundation landscape. The
+GitHub org is held by a dormant zero-repo account, which matters little for
+a Gitea-first project. Trademark clearance is still outstanding and is not
+something a web search can settle.
+
+The facilitator objected that *Henia* reads as a Polish female diminutive
+(Henryka → Henia) to a Polish-speaking audience. The user reaffirmed the
+choice; the objection is closed and recorded rather than re-litigated.
+
+**Resolution** — name adopted. `shape-notes.md` updated; the live Gitea
+remote deliberately left as `str8t.git` until the repository itself is
+renamed. The mechanical rename is deferred to its own change because three
+of the 41 occurrences are **runtime resource names**, not text:
+`str8t-devcontainer-home` holds the container's Claude Code login session,
+and `str8t-devcontainer-pgdata` / `str8t_dev` hold the local database —
+renaming orphans those volumes rather than migrating them.
+
+**Lesson candidate** — vetting a name means checking it against the things
+it will appear *next to*, not only against what already exists. Registries
+and domain lookups test for collision with the world; they cannot test for
+collision with your own dependency list, which is where the confusion
+actually lands. Say the candidate name aloud in a sentence with the names
+of everything it integrates with, and listen.
+
+A second, smaller one: ἡνία is a better description of the product than
+"straitjacket" ever was. A straitjacket immobilises; reins steer without
+stopping motion — the agent still moves fast, it just cannot choose the
+direction. The name arrived after the thesis and described it better.

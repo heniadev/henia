@@ -5,8 +5,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_NAME="str8t-devcontainer"
-NETWORK_NAME="str8t-devcontainer-net"
+IMAGE_NAME="henia-devcontainer"
+NETWORK_NAME="henia-devcontainer-net"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required but not found on PATH." >&2
@@ -70,9 +70,9 @@ fi
 # config/caches persist independently of the legacy/bare instance's. The
 # legacy/bare path keeps the literal volume name unchanged.
 if [ -n "$INSTANCE_NAME" ]; then
-  HOME_VOLUME="str8t-devcontainer-home-${INSTANCE_NAME}"
+  HOME_VOLUME="henia-devcontainer-home-${INSTANCE_NAME}"
 else
-  HOME_VOLUME="str8t-devcontainer-home"
+  HOME_VOLUME="henia-devcontainer-home"
 fi
 
 HOST_UID="$(id -u)"
@@ -110,19 +110,19 @@ docker compose -f "$COMPOSE_FILE" up -d --wait postgres >&2
 # this one shared Postgres server/container/volume — Postgres has no native
 # `CREATE DATABASE IF NOT EXISTS`, so existence has to be checked first. The
 # legacy/bare path keeps using the default database docker-compose.yml
-# already creates via POSTGRES_DB (str8t_dev), unchanged.
+# already creates via POSTGRES_DB (henia_dev), unchanged.
 if [ -n "$INSTANCE_NAME" ]; then
   DATABASE_NAME="$INSTANCE_NAME"
   # SQL-safety here depends entirely on INSTANCE_NAME already having passed
   # the ^[a-z][a-z0-9-]*$ check above (no quotes/semicolons possible) — see
   # the SAFETY INVARIANT note at that validation site.
-  DB_EXISTS="$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d str8t_dev -tAc "SELECT 1 FROM pg_database WHERE datname='${DATABASE_NAME}'")"
+  DB_EXISTS="$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d henia_dev -tAc "SELECT 1 FROM pg_database WHERE datname='${DATABASE_NAME}'")"
   if [ "$DB_EXISTS" != "1" ]; then
     echo "Creating Postgres database '${DATABASE_NAME}' for this instance..." >&2
-    docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d str8t_dev -c "CREATE DATABASE \"${DATABASE_NAME}\"" >&2
+    docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U app -d henia_dev -c "CREATE DATABASE \"${DATABASE_NAME}\"" >&2
   fi
 else
-  DATABASE_NAME="str8t_dev"
+  DATABASE_NAME="henia_dev"
 fi
 
 # The devcontainer's own outbound firewall (entrypoint.sh) blocks *new*
@@ -160,7 +160,7 @@ RUN_ARGS=(
 # passes no --name at all, identical to today (Docker auto-assigns one;
 # irrelevant since --rm removes the container on exit).
 if [ -n "$INSTANCE_NAME" ]; then
-  RUN_ARGS+=(--name "str8t-devcontainer-${INSTANCE_NAME}")
+  RUN_ARGS+=(--name "henia-devcontainer-${INSTANCE_NAME}")
 fi
 
 # Publish dev-server ports to the host. Needed regardless of the firewall —

@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-str8t ("str-AI-tjacket") is a harness that confines an agent to read-only
+Henia (formerly "str-AI-tjacket"; str8t) is a harness that confines an agent to read-only
 Kubernetes access, making a Git commit reconciled by Argo CD the only write
 path to a cluster. Today the repo holds the harness — devcontainer, RBAC,
 the 101 skill toolkit — not an application.

@@ -28,7 +28,7 @@ for a headless run).
 
 Set `ANTHROPIC_API_KEY` on the host to pass it through; otherwise Claude Code
 prompts you to log in on first run inside the container, and that session is
-kept in a named Docker volume (`str8t-devcontainer-home`) so you
+kept in a named Docker volume (`henia-devcontainer-home`) so you
 don't have to log in again next time.
 
 Set `CLAUDE_SAFE_MODE=1` to start with normal permission prompts instead of
@@ -78,7 +78,7 @@ Two things that trip people up here:
 `run.sh` brings up a local Postgres (`devcontainer/docker-compose.yml`) before
 starting the devcontainer itself, so the app has something to develop and run
 tests against without touching staging/production data. It's on the same
-user-defined network (`str8t-devcontainer-net`) the devcontainer
+user-defined network (`henia-devcontainer-net`) the devcontainer
 already joins, reachable at `postgres:5432` — `DATABASE_URL` is set to that
 automatically. Credentials are fixed, non-secret local-dev defaults
 (`app`/`app`), not sourced from `creds.yaml`: this is a throwaway local
@@ -96,7 +96,7 @@ Two things worth knowing:
   for the k3s API server below. This is re-resolved every run, not cached,
   since the IP can change if the container gets recreated.
 - **To reset it**, `docker compose -f devcontainer/docker-compose.yml down -v`
-  drops the named volume (`str8t-devcontainer-pgdata`) — the next
+  drops the named volume (`henia-devcontainer-pgdata`) — the next
   `run.sh` starts a fresh, empty database.
 
 Also copy `.env.example` to `.env` (gitignored) and fill in `SESSION_SECRET`
@@ -109,7 +109,7 @@ isn't produced automatically on install.
 
 A [named instance](#running-concurrent-instances) gets its own logical
 database on this same Postgres server/container/volume instead of the
-default `str8t_dev` — nothing extra to configure, `run.sh` creates
+default `henia_dev` — nothing extra to configure, `run.sh` creates
 it automatically the first time that instance name is used.
 
 ## Running concurrent instances
@@ -286,7 +286,7 @@ Three implementation notes worth knowing if you touch this:
   That's what actually distinguishes "the agent is reaching out to my LAN"
   from "something reached the container and it's replying."
 - **DNS still has to work.** The container runs on a dedicated user-defined
-  Docker network (`str8t-devcontainer-net`) instead of the default
+  Docker network (`henia-devcontainer-net`) instead of the default
   bridge, so it gets Docker's embedded DNS resolver on loopback (127.0.0.11)
   rather than whatever DNS server the default bridge network would hand it
   — which is sometimes itself a private-range address. Loopback is
@@ -372,7 +372,7 @@ that guidance — matched, partial, or explicitly skipped:
 | Only the trusted repo + needed files are visible — no `~/.ssh`, no cloud credentials, no production databases | Only the repo root is bind-mounted, plus a dedicated named volume for Claude's own config; nothing else from the host filesystem | ✅ Met |
 | Dropped/minimal Linux capabilities | `--cap-drop=ALL` plus exactly four added back: `NET_ADMIN`/`NET_RAW` (firewall setup) and `SETUID`/`SETGID` (`gosu`'s privilege drop) | ✅ Met — same four capabilities Anthropic's own reference needs for the equivalent firewall-then-drop pattern |
 | VS Code Dev Containers integration (`devcontainer.json`) | Standalone bash script only, no editor integration | ❌ Out of scope — this was built as "a shell script that launches Claude Code in a rootless container," not an editor-integrated devcontainer |
-| Session/config persistence across runs | Named Docker volume (`str8t-devcontainer-home`) mounted at the container's `$HOME`, survives across `--rm` runs | ✅ Met |
+| Session/config persistence across runs | Named Docker volume (`henia-devcontainer-home`) mounted at the container's `$HOME`, survives across `--rm` runs | ✅ Met |
 | Credentials for the agent to act on the repo itself (push/pull) | Not part of Anthropic's baseline guidance. Our addition: a **dedicated** git account's credentials, loaded from a gitignored `devcontainer/creds.yaml`, registered via `git credential approve` inside the container — never your own SSH keys or host git credentials | ➕ Extension beyond the documented guidance |
 | Cluster access (read-back state after a GitOps deploy) | Not part of Anthropic's baseline guidance. Our addition: a **read-only**, dedicated Kubernetes identity (`view` ClusterRole, no Secret contents) loaded from a gitignored `devcontainer/kubeconfig.yaml`, plus a narrow per-host firewall exception — see [Kubernetes access](#kubernetes-access). Writes to the cluster stay git-only (Argo CD), never `kubectl apply` from the agent | ➕ Extension beyond the documented guidance |
 | `--dangerously-skip-permissions` only inside an isolated environment meeting the above | Default behavior of `run.sh` (opt out with `CLAUDE_SAFE_MODE=1`) | ✅ Met — bounded by filesystem isolation *and* network isolation from local/VPN resources; still not bounded against arbitrary public internet hosts (see the network row above) |
