@@ -1,0 +1,16 @@
+# Credentials — never commit. Both are documented as "gitignored" in
+# devcontainer/README.md but the .gitignore that made that true did not
+# travel with the files. See JOURNEY.md, 2026-08-17.
+devcontainer/creds.yaml
+devcontainer/kubeconfig.yaml
+.env
+.env.*
+!.env.example
+
+# devcontainer runtime state
+.instances/
+.worktrees/
+
+# Upstream checkouts kept for reference, not vendored. Copy what we adopt
+# into the tree proper (with attribution) rather than committing the clones.
+3rd_party/

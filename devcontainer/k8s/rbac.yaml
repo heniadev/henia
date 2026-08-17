@@ -1,0 +1,99 @@
+# Read-only cluster identity for the devcontainer. Apply against your real
+# k3s cluster (not from inside the devcontainer — it has no cluster access
+# until this exists): `kubectl apply -f devcontainer/k8s/rbac.yaml`.
+#
+# Binds to the built-in `view` ClusterRole, which grants get/list/watch on
+# most objects cluster-wide but deliberately excludes Secret *contents* —
+# the devcontainer can see that a Secret exists, not read it. Deploys happen
+# via git + Argo CD watching the repo; this identity is read-back only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claude-devcontainer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-devcontainer
+  namespace: claude-devcontainer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-devcontainer-view
+subjects:
+  - kind: ServiceAccount
+    name: claude-devcontainer
+    namespace: claude-devcontainer
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+---
+# The built-in `view` ClusterRole only aggregates resources whose CRD carries
+# the `rbac.authorization.k8s.io/aggregate-to-view: "true"` label — Argo CD's
+# CRDs don't, so `view` alone can't see Applications/AppProjects even though
+# it can see everything else. This adds that read-only slice explicitly,
+# still get/list/watch only, same as `view`. Needed for the deploy plan's
+# step-6 checks (`kubectl get applications.argoproj.io` / `argocd app list`
+# equivalents) to work from this identity.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-devcontainer-argocd-view
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources:
+      - applications
+      - appprojects
+      - applicationsets
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-devcontainer-argocd-view
+subjects:
+  - kind: ServiceAccount
+    name: claude-devcontainer
+    namespace: claude-devcontainer
+roleRef:
+  kind: ClusterRole
+  name: claude-devcontainer-argocd-view
+  apiGroup: rbac.authorization.k8s.io
+---
+# `view` only grants read access to namespaced resources — StorageClass,
+# IngressClass, and cert-manager's ClusterIssuer are all cluster-scoped
+# (same reason `nodes` is forbidden under plain `view`), so they need their
+# own explicit grant, same shape as the argocd-view addition above: still
+# get/list/watch only. This lets the devcontainer independently confirm
+# deploy-plan placeholders — an encrypted StorageClass exists, a default
+# IngressClass exists, the `letsencrypt` ClusterIssuer exists — instead of
+# taking the operator's word for it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-devcontainer-cluster-scoped-view
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-devcontainer-cluster-scoped-view
+subjects:
+  - kind: ServiceAccount
+    name: claude-devcontainer
+    namespace: claude-devcontainer
+roleRef:
+  kind: ClusterRole
+  name: claude-devcontainer-cluster-scoped-view
+  apiGroup: rbac.authorization.k8s.io
