@@ -135,6 +135,8 @@ fi
 POSTGRES_CONTAINER_ID="$(docker compose -f "$COMPOSE_FILE" ps -q postgres)"
 POSTGRES_IP="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${NETWORK_NAME}\").IPAddress}}" "$POSTGRES_CONTAINER_ID")"
 ALLOWED_HOSTS_LIST=("${POSTGRES_IP}:5432")
+ALLOWED_HOSTS_LIST+=("88.99.160.8:22")
+ALLOWED_HOSTS_LIST+=("88.99.160.8:6443")
 
 RUN_ARGS=(
   --rm -it

@@ -1,58 +1,31 @@
 ---
 project: "Henia"
+version: 1
+status: draft
+created: 2026-08-18
 context_type: greenfield
-created: 2026-08-17
-updated: 2026-08-18
 product_type: automation
 target_scale:
-  users: medium        # ~100 to ~10 000 — "hundreds to a few thousand", 2026-08-18
-  qps: medium          # "steadily busy" — dozens to low hundreds of work items a day per instance
-  data_volume: small   # revised 2026-08-18: git holds everything vital, telemetry is scraped, audit is emitted — Henia keeps almost no durable state of its own
+  users: medium
+  qps: medium
+  data_volume: small
 timeline_budget:
   mvp_weeks: 9
   hard_deadline: 2026-10-22
-  after_hours_only: false   # full-time, 2026-08-18
-checkpoint:
-  current_phase: 8
-  phases_completed: [1, 2, 3, 4, 5, 6, 7, 8]
-  frs_drafted: 56   # FR-260 retired into FR-185; FR-085 added 2026-08-18
-  quality_check_status: clean
-  gray_areas_resolved:
-    - topic: "context type"
-      decision: "Greenfield. The devcontainer harness and 101 toolkit were first adopted as a tracked baseline (commit 977fbeb) so guardrail regressions show up in a diff, then shaping proceeds as greenfield."
-    - topic: "Kubernetes: product requirement or stack choice"
-      decision: "Product requirement, not a deferrable platform choice. The gap being targeted is specifically that cloud-native agentic autonomy does not exist yet, so deferring k8s to the tech-stack step would discard the definition of the product. The facilitator's proposed split was overridden by the user."
-    - topic: "SDD maturity: prerequisite or part of the product"
-      decision: "Prerequisite. Henia requires the adopting organization to arrive with mature spec-driven development; the market already has mature educational resources for it. Optional later addition if time allows: an interactive Katacoda-style simulator teaching the 101 toolset."
-    - topic: "source of the agent's authority"
-      decision: "For repository access, the agent is just another git identity with a narrower role — its permissions are git permissions, the same mechanism developers use. Execution isolation and CI/CD are delegated to native platform mechanisms rather than to git."
-    - topic: "MVP-too-big — scope-cost disclosure"
-      decision: "Exit B taken on 2026-08-17: the longer horizon is consciously accepted. Seven actions before first value and five integrations before the flow completes once, accepted deliberately so the conference PoC is a working system rather than a slice. The facilitator stops raising scope from this point."
-    - topic: "role of the devcontainer"
-      decision: "Scaffolding, not product lineage. It exists so primary coding before dogfooding can run in YOLO mode safely; it is NOT to be ported to Kubernetes beyond the general idea of isolation. A facilitator suggestion to reuse it for the inner loop was withdrawn as wrong."
-    - topic: "technical debt during the sprint"
-      decision: "Corners cut are documented as separate slices rather than as regret, so they enter the backlog already shaped and can be worked by the autonomous flow itself. MVP accepts stitches; post-MVP varnishes."
-    - topic: "no pipeline-engine integration"
-      decision: "2026-08-18, during PRD generation and superseding the Argo/Tekton lock taken hours earlier at the quality check. The user's reasoning: Argo is git-driven and Tekton is fully declarative, so both are steered by delivering configuration to git - which Henia does anyway - while read-only access to the running platform is enough to see what reconciled, and configuration stays secured and versioned in git. FR-080 was rewritten from 'trigger checks in an existing engine' to 'deliver configuration to git; the engine reconciles itself', and FR-085 was added for read-only platform sight. Effects: one fewer MVP integration, the two-engines limitation retired, the guardrails-unenforceable objection against FR-080 made moot, and the git-centred business rule becomes literally true. Kubernetes, git and Gitea-first remain product identity and stay named."
-    - topic: "quality check"
-      decision: "Run 2026-08-18. All required elements present. Fifteen gaps named with consequences; the user chose to fill all fifteen rather than accept any, so quality_check_status is clean and no gaps carry into the PRD's Open Questions. Highlights: primary success criterion is Henia building Henia unattended; the architect's own cost is that the SDLC lives in their head, which aligns the problem statement with the business rule; Argo and Tekton locked alongside Kubernetes; FR-200 wins over FR-060 via testing against substitutes; FR-415 gains guardrails-always-win precedence; the ASI04 seam exposure closed by declaring providers rather than discovering them; harness upgrades carry verified provenance; bundled tools declare their destinations. Four limitations accepted knowingly rather than solved - cross-instance spend bounded only by the adopter's arithmetic, project declaration sitting with cluster administrators rather than repository owners, no target for time-to-start, and two pipeline engines at MVP."
-    - topic: "Henia holds almost no durable state"
-      decision: "Established 2026-08-18 when the user challenged a data-volume assumption: telemetry is scraped rather than stored, everything vital is persisted in git, and the audit trail is emitted to the adopter's logging rather than kept (FR-250). What remains is agent sandboxes, which are working storage bounded by work-item lifetime and sized by peak concurrency rather than accumulation, and a GUI view that is a projection of git plus scraped metrics. target_scale.data_volume was corrected from medium to small as a result. This is the GitOps analogy from the vision holding at the architecture level rather than only in the pitch - git is the store."
-    - topic: "business rule"
-      decision: "Phase 5, 2026-08-18. The first answer offered - 'first cloud native autonomous agentic SDLC workflow' - was positioning already recorded in the vision and named no decision; the facilitator declined it and offered the rule shapes. The user chose state workflow, and the rule is: Henia learns the transition paths of the SDLC it is operating in - every point where a unit of work changes form is a transition it must recognize and learn from, including the ones where work is rejected or has to be split. Empty-CRUD does not apply. The rule surfaced three transitions no requirement covered - review comments becoming work (FR-420), a dropped pull request whose reasoning is kept (FR-430), and an oversized slice divided into descendants (FR-440) - all confirmed in scope. On challenge the rule was narrowed consciously: the framework ships a conventional transition model and learns the project's deviations from it (FR-415), because a project with no history is the adoption case."
-    - topic: "harness design"
-      decision: "Phase 4 was reopened on 2026-08-18 after the user judged the harness under-designed - it had existed only as a seam name in FR-120. Five requirements added (FR-340 to FR-380): a shared writable store of plugins, lessons and skills; per-repository scoping; upstream self-update; a read-once credential broker; and a bundled tool set. Two Socratic objections changed the design, both by routing a bypass back through git - the shared store lives in the repository so every agent write is a reviewed PR, and the harness upgrade arrives as a PR against a pinned version rather than updating silently. Both were back doors around the eight guardrails; both now pass through them. FR-370 is also the first real answer to the standing FR-060 / FR-200 conflict. Three follow-up decisions on 2026-08-18 closed the objections carried out of that round: wrong lessons are handled by promoting a lesson into the specification with a human in the loop, documented as operational practice (FR-390); per-repository scoping is intentional, protecting the agent's context from general advice that would hinder rather than help it; and bundled tools get general rules for general tools (FR-400) plus a curated bootstrap list of providers (FR-410)."
-    - topic: "Socratic round on the functional requirements"
-      decision: "Completed 2026-08-18 over twelve batches - one challenge per requirement, no reduction taken. Eight objections were accepted and changed the requirements: FR-020 gained failure classification (FR-025); FR-100 gained a stated-cause rule (FR-105); FR-130's vague narrowing became named forbidden actions; FR-180 gained an explicit disclosure that write access confers agent control (FR-185); FR-230 now hands back accumulated context instead of halting; FR-240's stop leaves a recoverable state, with FR-330 to resume or remove it; FR-260 merged into FR-185. Three answers added scope rather than defending it - the observe step (FR-112 to FR-117), the read-only telemetry constraint (FR-113), and the operation and cost visibility group (FR-270 to FR-330). The remaining requirements stand as written."
-    - topic: "OWASP guardrail coverage"
-      decision: "All eight framework-owned guardrails are Henia's own requirements (FR-170 to FR-250), chosen by the user on 2026-08-17 after the facilitator ingested both OWASP lists at the user's request. Rationale: Henia's design is structurally the attack shape both lists describe - an autonomous identity taking instructions from a git artifact, executing code in a build environment, and opening a PR that triggers a pipeline - so the guardrails are what distinguish the product from a liability. Residual CI/CD risks (CICD-SEC-2, -7, -8) ship as a published adopter checklist (FR-260) rather than as enforcement."
-    - topic: "authorship of the functional requirements"
-      decision: "On 2026-08-17 the user instructed the facilitator to derive the FR list from the phase 1-3 record instead of doing a first pass themselves. Every FR restates already-recorded content; priorities are the facilitator's proposal, marked as such in the section, and open to correction. Where the record contained no capability - the OWASP guardrails - a gap marker was written rather than a requirement invented."
-    - topic: "project name"
-      decision: "Renamed from str8t to Henia (Greek ἡνία, 'the reins') on 2026-08-17, chosen for the CNCF Greek-naming convention. Vetted clean on npm, PyPI, crates.io, henia.io/.dev/.sh/.net, no commercial use in technology, and no phonetic collision with the CNCF or CD Foundation landscape. GitHub org 'henia' is held by a dormant zero-repo user; suffixed handles are free and the project is Gitea-first. Trademark clearance still outstanding. The facilitator raised that Henia reads as a Polish female diminutive to a Polish-speaking audience; the user reaffirmed the choice and the objection is closed."
+  after_hours_only: false
 ---
 
-# Shape notes — Henia
+# Product Requirements — Henia
+
+> **Recorded contract deviation.** This document knowingly names specific
+> technologies in eight places, which the schema's technical-leak lint would
+> normally reject. The names were kept by explicit decision on 2026-08-18:
+> Henia is by design a cloud-native application on Kubernetes, is centred on
+> git, and takes Gitea as its first supported git provider — these are product
+> identity rather than deferrable stack choices. The affected phrases are listed
+> in `## Open Questions`. Socratic block-quotes are exempt from the lint by the
+> same decision: they record why a requirement was challenged, including which
+> technology was being argued about, and the contract requires them verbatim.
 
 ## Vision & Problem Statement
 
@@ -1182,133 +1155,38 @@ deferred.
 Technology exclusions are deliberately absent from this list; stack-shaped
 decisions live in the forward blocks.
 
-## Quality cross-check
 
-Run 2026-08-18. Every required element present. Fifteen gaps were named with
-their consequences; the user chose to fill all fifteen rather than accept any.
-Result: **clean — no gaps recorded.**
+## Open Questions
 
-What the round changed:
+**None.** The shaping session's quality gate closed `clean`: fifteen gaps were
+named with their consequences and all fifteen were filled rather than accepted,
+so there is no gap marker anywhere in this document to mirror here.
 
-- **Filled by new content.** Success criteria (primary, secondary, guardrails);
-  a Non-Functional Requirements section; four further user stories covering the
-  observe loop, review comments, dropped work and splitting; the architect's own
-  version of the cost, which had been carried since phase 3 and now makes the
-  problem statement and the business rule describe the same person.
-- **Resolved conflicts between must-have requirements.** FR-200 wins over FR-060
-  — the inner loop tests against substitutes and anything needing real
-  credentials is verified in the outer loop. FR-220 stands as written: the
-  self-repair loop is reviewed, not blocked. FR-440's budget reset is
-  deliberate, bounded by a cap on how many times a lineage may divide. FR-415
-  gains a precedence rule — guardrails always win, and a learned model can never
-  weaken a fixed gate.
-- **Closed surfaces.** Provider implementations load only when a declaration
-  names them, which closed the ASI04 exposure of the seams without a ninth
-  guardrail. Harness upgrades now carry verified provenance. Bundled tools
-  declare the destinations they need, so FR-190's allowlist stays meaningful.
-  Who may declare a project is delegated to the platform's access control.
-- **Locked, then superseded the same day.** Argo and Tekton were locked as
-  integration targets and then dropped as integrations entirely: Henia delivers
-  configuration to git and reads the platform read-only, so no pipeline engine
-  is integrated with. This retired the "two engines at MVP" limitation listed
-  below before it ever applied.
-- **Accepted limitations, recorded rather than resolved.** Cross-instance spend
-  is bounded by arithmetic the adopter performs, not by anything the framework
-  enforces — the guarantee is smaller than the problem the vision names. The
-  permission to declare a project sits with cluster administrators rather than
-  with repository owners. No target exists for how quickly work begins. *(The
-  fourth limitation — two pipeline engines at MVP — was removed later the same
-  day when both were dropped as integrations.)*
-- **Corrected.** The notes carried the pre-rename Gitea remote; verified against
-  the working tree and updated, including the secondary GitHub remote.
+Three items are carried knowingly and are recorded as decisions rather than as
+gaps, because each was decided rather than left open:
 
-## Forward: tech-stack
+- Cross-instance spend is bounded by arithmetic the adopting organization
+  performs over published figures, not by anything the framework enforces. The
+  guarantee is therefore smaller than the cost the vision names.
+- The permission to bring a project under management sits with whoever
+  administers the platform, rather than with the owners of the repository being
+  managed — who are the people who would notice a wrong answer.
+- No target exists for how quickly a work item begins to be worked. Declined
+  deliberately; the consequence is that the stack step has nothing to weigh
+  notification approaches against.
 
-- **Kubernetes is locked as a product requirement**, per the user (2026-08-17),
-  not an open choice for `/101-tech-stack-selector`. Recorded here so the
-  stack step treats it as given. Note: `/101-prd`'s technical-leak lint will
-  flag the technology name in the requirements sections — that is expected,
-  and the decision to hold the line there is the user's to make consciously at
-  generation time.
-- **Deployment shape**, user-described 2026-08-18: a **`henia-operator`**
-  ingesting **custom resource definitions**, one per managed project; each
-  configured project receives its own instance and main loop; the operator
-  handles the SDLC and health of every instance. The operator pattern and the
-  custom-resource declaration mechanism are Kubernetes-specific and belong to
-  the stack step — FR-450 to FR-470 state only the observable capability
-  (per-project instance, declared configuration, supervised lifecycle). Expect
-  `/101-prd`'s leak lint to flag the vocabulary if it reaches the requirements.
-  The user cites **Argo CD** as the precedent for this operator-and-instances
-  shape (2026-08-18) — an established pattern to be adopted rather than
-  reinvented. The platform supervises the operator; the operator supervises
-  instances; agent restarts stay inside an instance's own loop.
-- **Harness specifics**, user-named 2026-08-18: the shared agent store is
-  described in terms of **pi.dev** artefacts — plugins, lessons, skills — and
-  the bundled tool set was named as **exa**, **context7** and **sentry** MCP
-  servers. The compromised-dependency scenario motivating FR-370 was given as a
-  hostile npm package scanning the environment for credentials. Requirements
-  FR-340 to FR-380 state only the observable capability; the artefact vocabulary
-  and the tool names are stack questions.
-- **Self-telemetry and cost sourcing**, user-named 2026-08-18: the framework
-  exposes its own metrics for scraping (a `/metrics` endpoint was the example
-  given), and per-agent cost comes from the model provider's own reporting where
-  such an interface exists, falling back to operator-supplied rates. The
-  transport and the provider interface are stack questions; FR-270 and FR-320
-  state only the observable capability.
-- **Observability integration targets**, user-named 2026-08-18 for the observe
-  step (FR-112, FR-114): **Sentry** and **Prometheus**. Recorded here rather
-  than in the requirements, which state only that the framework observes the
-  running system and files findings.
-- **Guardrail requirements and the leak lint.** FR-170 to FR-260 were phrased as
-  externally observable properties on purpose, but a few (network destinations,
-  approved dependency sources, secrets absent from the inner loop, privileged
-  pipeline-definition diffs) sit close to `/101-prd`'s enforcement-mechanism and
-  stack-layer categories. Expect the lint to raise them; the OWASP entries each
-  requirement closes are recorded inline so the decision to keep the wording is
-  an informed one. How each guardrail is enforced remains a stack question.
-- **Sandboxing candidates**, user-named and explicitly open ("or similar"):
-  `kubernetes-sigs/agent-sandbox`, `smartxworks/knest`.
-- **CI/CD engines: no integration at all.** Argo and Tekton were locked as
-  integration targets on 2026-08-18 and un-locked the same day. Henia delivers
-  pipeline configuration to git (FR-080) and reads the running platform
-  read-only (FR-085); the engine reconciles itself. Both remain the expected
-  engines in practice and neither is integrated with, so `/101-tech-stack-selector`
-  has no engine choice to make — only the question of what read-only platform
-  access looks like.
-- Upstream reference checkouts surveyed before shaping, both MIT:
-  `open-mercato/skills` (tracker-provider seam — abstract operations plus a
-  per-provider Markdown descriptor) and `open-mercato/cezar` (agent-runner
-  seam including an existing pi backend; `ForgeDriver` seam; issue-label
-  polling automations). Kept in `3rd_party/`, gitignored, nothing adopted.
+Two process notes, for the reviews that follow:
 
-## Forward: technical-roadmap
-
-- Optional, explicitly conditional on time: an **interactive simulator**
-  (Katacoda-style) teaching the 101 toolset. Stated as "if time allows" — not
-  scope, and not a commitment.
-- Phase split stated by the user before shaping: the 101 toolkit is the
-  **bootstrap** that builds the harness with a human at every gate; once
-  deployed, the steady state is issue-driven — a Gitea issue tagged
-  `#feature` picked up by the automation framework, modelled on or shifted to
-  the `om-*` skills and cezar's workflows, which assume the SDD work is
-  finished and the SDLC is purely git-based.
-- Provider-agnostic is a day-one requirement, with **Gitea first as the PoC**
-  implementation — the reference implementation, not a special case. The
-  project's own remote is already Gitea: `origin` is
-  `git.tobiko.kondi.net/kondi/henia.git`, with a secondary GitHub remote `gh` at
-  `github.com/heniadev/henia.git` — the suffixed organization handle taken
-  because `henia` on GitHub is held by a dormant zero-repo user. Verified
-  against the working tree 2026-08-18; the notes previously carried the
-  pre-rename path.
-- Forking cezar remains open, primarily to avoid hand-building a GUI and to
-  reuse its issue-label polling loop; inspiration-only is the alternative.
-- **Debt-as-slices practice.** Corners cut while sprinting to the conference
-  are written up as separate slices at the moment they are cut, not
-  reconstructed afterwards, so post-MVP work arrives already shaped and can be
-  worked by the autonomous flow itself. Watch-item raised by the facilitator
-  and not yet resolved: the debt slices are only autonomously workable if the
-  autonomy loop works, and the corners cut are most likely to be inside that
-  same loop — so where the stitching lands matters more than how much of it
-  there is.
-- The devcontainer is explicitly **not** a prototype of the Kubernetes sandbox
-  and is not to be ported; only the general idea of isolation carries over.
+- **FR-085 has not been through a Socratic challenge.** It was added on
+  2026-08-18 during generation, after the challenge round had closed. Every
+  other requirement carries exactly one; this one carries none.
+- **Deliberate technical-leak deviations**, kept by decision and listed so they
+  are visible rather than hidden: `Kubernetes` in `## Vision & Problem
+  Statement`, in the User Stories main path, in US-01, in FR-030 and in
+  `## Access Control`; `Gitea`, `pi.dev` and `knest` in the User Stories MVP
+  boundary; `CODEOWNERS` in FR-150 and `## Access Control`; and `broker` in
+  FR-370, which names an enforcement mechanism where the matching
+  non-functional requirement states the same property observably. Of these,
+  `pi.dev` and `knest` are the two with no stated product-identity
+  justification — they are seam implementations, and a later decision to move
+  them into the forward block would cost this document nothing.
