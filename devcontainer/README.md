@@ -357,6 +357,31 @@ punches a narrow exception for exactly that `host:port` (not the surrounding
 kubeconfig file, no exception, no cluster access — same "absent means
 skipped" pattern as `creds.yaml`.
 
+## Go toolchain
+
+The image carries **Go 1.26** (`/usr/local/go`) and **kubebuilder v4.15.0**,
+added by the `cluster-substrate` change so Henia's own operator can be
+scaffolded and regenerated here.
+
+This is a deliberate departure worth naming, because the image was otherwise
+kept toolchain-free — kubectl, kustomize, helm, sops and friends are all
+control-plane tools that inspect and template, none of them compile anything.
+Go is the first language runtime in it. The alternative considered was running
+`kubebuilder` in a throwaway pod on the cluster, which works for a one-off
+scaffold but makes `kubebuilder create api` a ceremony, and that command gets
+re-run every time the API types change.
+
+Both are pinned with per-architecture sha256 verification, in the same style as
+`droast`, `kubeconform`, `kustomize`, `helm`, `age` and `ksops`.
+
+`GOPATH` and `GOCACHE` point at `/home/agent/go` and
+`/home/agent/.cache/go-build` — inside the persisted named volume, deliberately
+**not** under `/workspace`. Module downloads and build artefacts in the repo
+would otherwise turn up as untracked files in every `git status`. The same
+volume-shadowing constraint described under [pre-commit
+hooks](#pre-commit-hooks) applies: neither cache can be pre-warmed at image
+build time, so the first `go build` in a fresh volume pays the download cost.
+
 ## Anthropic's devcontainer guidance vs. this implementation
 
 Anthropic's own recommendation for when `--dangerously-skip-permissions`

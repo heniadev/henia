@@ -638,8 +638,8 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 1.1 `droast` reports no errors on the edited `devcontainer/Dockerfile`
-- [ ] 1.2 The pinned Go 1.26 and kubebuilder v4.15.0 download URLs resolve
+- [x] 1.1 `droast` reports no errors on the edited `devcontainer/Dockerfile`
+- [x] 1.2 The pinned Go 1.26 and kubebuilder v4.15.0 download URLs resolve
 
 #### Manual
 
