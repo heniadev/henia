@@ -47,9 +47,18 @@ type HerdReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
 func (r *HerdReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Deliberately does not act on the declaration. F-01 requires the framework
+	// to RUN in the cluster and be readable; making a Herd actually bring
+	// repositories under management is S-01 `project-declaration`, which remains
+	// a separate roadmap slice.
+	//
+	// The log line is not a placeholder: it is how the substrate demonstrates
+	// that reconciliation reaches this code at all, which is otherwise invisible
+	// from outside the process.
+	log.Info("reconciling Herd (no-op: reconciliation logic belongs to S-01)",
+		"herd", req.NamespacedName.String())
 
 	return ctrl.Result{}, nil
 }

@@ -693,10 +693,10 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [x] 5.1 A `PipelineRun` completes successfully end to end
-- [x] 5.2 The built image is present in Harbor under the expected repository and tag
-- [x] 5.3 No pipeline pod runs with `privileged: true`
-- [x] 5.4 The built image executes in a throwaway pod
+- [x] 5.1 A `PipelineRun` completes successfully end to end — 6676f58
+- [x] 5.2 The built image is present in Harbor under the expected repository and tag — 6676f58
+- [x] 5.3 No pipeline pod runs with `privileged: true` — 6676f58
+- [x] 5.4 The built image executes in a throwaway pod — 6676f58
 
 #### Manual
 
