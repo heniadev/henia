@@ -681,9 +681,9 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [x] 4.1 `tekton-pipelines-controller` and `-webhook` reach `Ready`
-- [x] 4.2 The `Task`, `Pipeline`, `TaskRun` and `PipelineRun` CRDs are registered
-- [x] 4.3 The deployed controller image tag is `v1.15.0`
+- [x] 4.1 `tekton-pipelines-controller` and `-webhook` reach `Ready` — 0e3ee4a
+- [x] 4.2 The `Task`, `Pipeline`, `TaskRun` and `PipelineRun` CRDs are registered — 0e3ee4a
+- [x] 4.3 The deployed controller image tag is `v1.15.0` — 0e3ee4a
 
 #### Manual
 
@@ -693,10 +693,10 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 5.1 A `PipelineRun` completes successfully end to end
-- [ ] 5.2 The built image is present in Harbor under the expected repository and tag
-- [ ] 5.3 No pipeline pod runs with `privileged: true`
-- [ ] 5.4 The built image executes in a throwaway pod
+- [x] 5.1 A `PipelineRun` completes successfully end to end
+- [x] 5.2 The built image is present in Harbor under the expected repository and tag
+- [x] 5.3 No pipeline pod runs with `privileged: true`
+- [x] 5.4 The built image executes in a throwaway pod
 
 #### Manual
 
