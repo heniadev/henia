@@ -667,11 +667,11 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [x] 3.1 Harbor pods reach `Ready`
-- [x] 3.2 `/api/v2.0/health` reports all components healthy
-- [x] 3.3 The Harbor project exists and the robot account can authenticate against it
-- [x] 3.4 A test image can be pushed and pulled by digest using the robot credential
-- [x] 3.5 `registries.yaml` names the in-cluster Service, is present on the host, and k3s has restarted since
+- [x] 3.1 Harbor pods reach `Ready` — 9c0f4eb
+- [x] 3.2 `/api/v2.0/health` reports all components healthy — 9c0f4eb
+- [x] 3.3 The Harbor project exists and the robot account can authenticate against it — 9c0f4eb
+- [x] 3.4 A test image can be pushed and pulled by digest using the robot credential — 9c0f4eb
+- [x] 3.5 `registries.yaml` names the in-cluster Service, is present on the host, and k3s has restarted since — 9c0f4eb
 
 #### Manual
 
@@ -681,9 +681,9 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 4.1 `tekton-pipelines-controller` and `-webhook` reach `Ready`
-- [ ] 4.2 The `Task`, `Pipeline`, `TaskRun` and `PipelineRun` CRDs are registered
-- [ ] 4.3 The deployed controller image tag is `v1.15.0`
+- [x] 4.1 `tekton-pipelines-controller` and `-webhook` reach `Ready`
+- [x] 4.2 The `Task`, `Pipeline`, `TaskRun` and `PipelineRun` CRDs are registered
+- [x] 4.3 The deployed controller image tag is `v1.15.0`
 
 #### Manual
 

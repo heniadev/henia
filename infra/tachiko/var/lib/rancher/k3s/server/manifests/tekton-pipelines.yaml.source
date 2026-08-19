@@ -1,0 +1,24 @@
+# Tekton Pipelines — pinned source reference (cluster-substrate phase 4).
+#
+# The release manifest itself is ~1.6 MB of generated YAML and is deliberately
+# NOT vendored here: committing it would bury real configuration under a wall of
+# upstream output, and it is reproducible byte-for-byte from the URL below.
+# What IS tracked is the pin — the exact version, URL and checksum — which is
+# the part that carries intent.
+#
+# Applied by copying the fetched file to
+# /var/lib/rancher/k3s/server/manifests/tekton-pipelines.yaml, where k3s
+# auto-deploy reconciles it.
+#
+# Track: CURRENT (v1.15.x), not the operator's LTS line (v1.6.x). The
+# infrastructure document names choosing accidentally as a risk; current is
+# chosen deliberately, for the same version-currency reason that justified
+# self-hosting k3s rather than taking a provider's trailing version.
+#
+# NOTE: this is not on the GCS path the Tekton docs usually cite —
+# storage.googleapis.com/tekton-releases/pipeline/previous/v1.15.0/release.yaml
+# returns 404, and only the unpinned .../pipeline/latest/release.yaml resolves
+# there. The GitHub release asset is the pinned source.
+version: v1.15.0
+url: https://github.com/tektoncd/pipeline/releases/download/v1.15.0/release.yaml
+sha256: 9b1bfe474da43d4e7e9993e5c2b67ef0966b0a513de51f25087bc1118a5f49d3

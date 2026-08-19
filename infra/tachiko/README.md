@@ -26,6 +26,7 @@ obvious from where it sits here.
 | `var/lib/rancher/k3s/server/manifests/prometheus.yaml` | Prometheus via k3s auto-deploy, chart pinned `29.27.0` |
 | `var/lib/rancher/k3s/server/manifests/harbor.yaml` | Harbor registry via k3s auto-deploy, chart pinned `1.19.2`, Trivy disabled |
 | `etc/rancher/k3s/registries.yaml` | containerd registry config — points at Harbor's **in-cluster Service**, not the public hostname |
+| `var/lib/rancher/k3s/server/manifests/tekton-pipelines.yaml.source` | Tekton Pipelines pin (version, URL, sha256) — the 1.6 MB manifest itself is not vendored |
 
 ## Deliberately not tracked here
 
