@@ -541,27 +541,27 @@ that matters.
 
 #### Automated
 
-- [x] 3.1 `/version` on the API server reports `v1.36.3+k3s1`
-- [x] 3.2 The single node reports `Ready`
-- [x] 3.3 `local-path` exists and is the default StorageClass
-- [x] 3.4 No Traefik deployment, service or HelmChart exists
-- [x] 3.5 A pod resolves and reaches `git.tobiko.kondi.net` over HTTPS
+- [x] 3.1 `/version` on the API server reports `v1.36.3+k3s1` — 7696c9b
+- [x] 3.2 The single node reports `Ready` — 7696c9b
+- [x] 3.3 `local-path` exists and is the default StorageClass — 7696c9b
+- [x] 3.4 No Traefik deployment, service or HelmChart exists — 7696c9b
+- [x] 3.5 A pod resolves and reaches `git.tobiko.kondi.net` over HTTPS — 7696c9b
 
 #### Manual
 
-- [x] 3.6 The API server is reachable from the devcontainer and refused from outside AS12912
+- [x] 3.6 The API server is reachable from the devcontainer and refused from outside AS12912 — 7696c9b
 
 ### Phase 4: HAProxy ingress
 
 #### Automated
 
-- [ ] 4.1 The controller pods reach `Ready`
-- [ ] 4.2 IngressClass `haproxy` exists and is marked default
-- [ ] 4.3 A test Ingress returns HTTP 200 with the expected body
+- [x] 4.1 The controller pods reach `Ready`
+- [x] 4.2 IngressClass `haproxy` exists and is marked default
+- [x] 4.3 A test Ingress returns HTTP 200 with the expected body
 
 #### Manual
 
-- [ ] 4.4 Hostname-based routing resolves from outside the host
+- [x] 4.4 Hostname-based routing resolves from outside the host
 
 ### Phase 5: Read-only cluster identity (FR-085)
 
