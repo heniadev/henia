@@ -720,9 +720,9 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 7.1 The operator appears as an `up` target in Prometheus
-- [ ] 7.2 `controller_runtime_reconcile_total` is queryable and non-empty
-- [ ] 7.3 Go runtime metrics for the operator process are present
+- [x] 7.1 The operator appears as an `up` target in Prometheus
+- [x] 7.2 `controller_runtime_reconcile_total` is queryable and non-empty
+- [x] 7.3 Go runtime metrics for the operator process are present
 
 #### Manual
 
@@ -732,10 +732,10 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 8.1 The read-only identity lists `Herd` resources across namespaces
-- [ ] 8.2 Creating or deleting a `Herd` as that identity is denied with 403
-- [ ] 8.3 The identity reads the operator Deployment and its pod status
-- [ ] 8.4 Reading Secret contents is still denied
+- [x] 8.1 The read-only identity lists `Herd` resources across namespaces
+- [x] 8.2 Creating or deleting a `Herd` as that identity is denied with 403
+- [x] 8.3 The identity reads the operator Deployment and its pod status
+- [x] 8.4 Reading Secret contents is still denied
 
 #### Manual
 
