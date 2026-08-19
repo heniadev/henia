@@ -652,12 +652,12 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [x] 2.1 `go build ./...` succeeds
-- [x] 2.2 `go vet ./...` reports nothing
-- [x] 2.3 `make manifests generate` produces no diff on a second run
-- [x] 2.4 The generated CRD declares group `henia.dev`, version `v1alpha1`, kind `Herd`
+- [x] 2.1 `go build ./...` succeeds — 2604250
+- [x] 2.2 `go vet ./...` reports nothing — 2604250
+- [x] 2.3 `make manifests generate` produces no diff on a second run — 2604250
+- [x] 2.4 The generated CRD declares group `henia.dev`, version `v1alpha1`, kind `Herd` — 2604250
 - [ ] 2.5 The CRD declares `categories: [henia]` and a shortName, and `kubectl get henia` resolves
-- [x] 2.6 `PROJECT` records domain `henia.dev` and the private-host module path
+- [x] 2.6 `PROJECT` records domain `henia.dev` and the private-host module path — 2604250
 
 #### Manual
 
@@ -667,11 +667,11 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 3.1 Harbor pods reach `Ready`
-- [ ] 3.2 `/api/v2.0/health` reports all components healthy
-- [ ] 3.3 The Harbor project exists and the robot account can authenticate against it
-- [ ] 3.4 A test image can be pushed and pulled by digest using the robot credential
-- [ ] 3.5 `registries.yaml` names the in-cluster Service, is present on the host, and k3s has restarted since
+- [x] 3.1 Harbor pods reach `Ready`
+- [x] 3.2 `/api/v2.0/health` reports all components healthy
+- [x] 3.3 The Harbor project exists and the robot account can authenticate against it
+- [x] 3.4 A test image can be pushed and pulled by digest using the robot credential
+- [x] 3.5 `registries.yaml` names the in-cluster Service, is present on the host, and k3s has restarted since
 
 #### Manual
 

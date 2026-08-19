@@ -24,6 +24,8 @@ obvious from where it sits here.
 | `usr/local/sbin/refresh-as12912-set.sh` | Fetches AS12912's announced prefixes from RIPEstat and reloads the set in place |
 | `var/lib/rancher/k3s/server/manifests/haproxy-ingress.yaml` | HAProxy ingress via k3s auto-deploy, chart pinned `1.53.0` |
 | `var/lib/rancher/k3s/server/manifests/prometheus.yaml` | Prometheus via k3s auto-deploy, chart pinned `29.27.0` |
+| `var/lib/rancher/k3s/server/manifests/harbor.yaml` | Harbor registry via k3s auto-deploy, chart pinned `1.19.2`, Trivy disabled |
+| `etc/rancher/k3s/registries.yaml` | containerd registry config — points at Harbor's **in-cluster Service**, not the public hostname |
 
 ## Deliberately not tracked here
 
@@ -38,6 +40,15 @@ obvious from where it sits here.
   `/etc/fstab`, project 1000 on the local-path directory). This is machine state
   established in a Hetzner rescue boot, not a file that can be applied. The
   procedure lives in phase 1 of the plan.
+- **The `/etc/hosts` entry mapping `harbor-core.harbor.svc` to Harbor's
+  ClusterIP.** containerd runs on the host and does not use cluster DNS, so the
+  in-cluster registry name needs resolving there. Not tracked because the
+  ClusterIP is environment state, not configuration — but note it is **not**
+  stable across a Harbor reinstall, so if the Service is recreated the entry must
+  be updated or every image pull fails.
+- **Harbor's admin password and the `robot$henia+pipeline` credential** — held in
+  Kubernetes Secrets and in root-only files on the host (`/root/harbor-admin.txt`,
+  `/root/harbor-robot.txt`).
 
 ## Caveat — this is a copy, not a deployment mechanism
 

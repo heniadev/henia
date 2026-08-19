@@ -1,0 +1,54 @@
+# Container registry for the Henia operator image, on the same machine as the
+# cluster that pulls from it (context/changes/cluster-substrate, phase 3).
+#
+# Deliberately NOT the Harbor on 10.242.0.10: that cluster is k3s v1.25 from
+# 2023 and shared with ~20 unrelated applications, so depending on it would make
+# every pod start here contingent on hardware and a Kubernetes version this
+# project does not control.
+#
+# HTTP only - cert-manager is a declared exclusion of this change, so TLS and
+# credential encryption are deferred. Trivy is disabled: the infrastructure risk
+# register rates resource contention the top risk on this box, and a vulnerability
+# scanner is the most expendable Harbor component for a registry holding one
+# first-party image.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: harbor
+  namespace: kube-system
+spec:
+  repo: https://helm.goharbor.io
+  chart: harbor
+  version: 1.19.2
+  targetNamespace: harbor
+  createNamespace: true
+  valuesContent: |-
+    externalURL: http://harbor.tachiko.kondi.net
+    existingSecretAdminPassword: harbor-admin
+    existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+    expose:
+      type: ingress
+      tls:
+        enabled: false
+      ingress:
+        className: haproxy
+        hosts:
+          core: harbor.tachiko.kondi.net
+    persistence:
+      enabled: true
+      persistentVolumeClaim:
+        registry:
+          storageClass: local-path
+          size: 50Gi
+        jobservice:
+          jobLog:
+            storageClass: local-path
+            size: 2Gi
+        database:
+          storageClass: local-path
+          size: 5Gi
+        redis:
+          storageClass: local-path
+          size: 2Gi
+    trivy:
+      enabled: false
