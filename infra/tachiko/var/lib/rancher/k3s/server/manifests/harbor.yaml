@@ -32,6 +32,18 @@ spec:
         enabled: false
       ingress:
         className: haproxy
+        annotations:
+          # HAProxy ingress redirects to HTTPS by default, sending clients to
+          # :8443 — a port with no TLS configured here and no firewall opening.
+          # cert-manager is a declared exclusion of this change, so Harbor is
+          # HTTP-only by design and the redirect has to be turned off explicitly
+          # or the UI is unreachable by hostname.
+          haproxy.org/ssl-redirect: "false"
+          # The chart injects these two as "true" regardless of expose.tls.enabled;
+          # HAProxy honours the generic ingress.kubernetes.io key as well, so both
+          # must be overridden or the redirect survives.
+          ingress.kubernetes.io/ssl-redirect: "false"
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
         hosts:
           core: harbor.tachiko.kondi.net
     persistence:
