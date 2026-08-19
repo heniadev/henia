@@ -49,6 +49,15 @@ roleRef:
 # ClusterIssuers. Both were dropped when this identity moved to tachiko:
 # neither component is installed on this cluster, and a grant for an absent
 # API group is dead configuration that outlives the reason for it.
+#
+# Recorded because review finding F7 flagged it: the devserver-setup plan
+# authorised removing the Argo CD grants and said nothing about the
+# cert-manager one, so that second removal was undeclared. It stands, but
+# note the consequence — when cert-manager is installed, restore the
+# ClusterIssuer grant here, or the devcontainer will be unable to confirm
+# that a ClusterIssuer exists and will have to take the operator's word for
+# it, which is the exact failure this file's cluster-scoped grants exist to
+# prevent.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

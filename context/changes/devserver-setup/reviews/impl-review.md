@@ -121,7 +121,7 @@
 - **Location**: `plan.md` phase 1 § Overview and change 4
 - **Detail**: The plan's stated purpose is that "a runaway workspace cannot fill `/` and stall the k3s datastore". What was delivered is narrower: project quota is not enforced against processes holding `CAP_SYS_RESOURCE`, so any host-root process remains unbounded. Verified during implementation — a root `dd` wrote 20 MiB against a 10 MiB limit, while the same write as an unprivileged user failed with `EDQUOT` at 9 MiB. Containers drop that capability by default, so the agent-workspace case the plan actually cares about *is* covered; the discrepancy is between the plan's wording and the mechanism's reach, and it was recorded in the phase 1 commit rather than hidden.
 - **Fix**: amend the plan's phase 1 wording (or `infrastructure.md`'s risk row) to state that the boundary binds pods, not host-root processes.
-- **Decision**: PENDING
+- **Decision**: FIXED (2026-08-19) — documented in `infrastructure.md`'s risk register rather than in the plan, so the correction lands in the durable document rather than in an approved artifact that describes work already done. The row now records the quota as applied and verified, states plainly that the cap binds pods and not the host because the kernel exempts `CAP_SYS_RESOURCE`, and drops the impact from High to Medium — the mitigation is real, just narrower than the original wording implied. Alerting on root usage is retained as still-worth-adding.
 
 ### F6 — Manual item 5.6 was checked without the restart it names
 
@@ -131,7 +131,7 @@
 - **Location**: `plan.md` Progress item 5.6
 - **Detail**: The item reads "A devcontainer **restart** picks up the new kubeconfig and its firewall exception". No devcontainer restart occurred. The evidence accepted was a `kubectl` call from the already-running container returning `403 Forbidden` on `nodes` — which proves the kubeconfig authenticates and RBAC applies, but not that `run.sh` re-derives the firewall exception from the new `server:` value on a cold start. That derivation is the part only a restart exercises.
 - **Fix**: restart the devcontainer once and confirm cluster access still works; if it does, the item is honestly checked.
-- **Decision**: PENDING
+- **Decision**: DEFERRED (2026-08-19) — queued in `follow-ups/review-fixes.md` with the exact check to run. It cannot be closed from inside the container that needs restarting, and the Progress item stays checked rather than being flipped back: the operator confirmed the identity works from their own machine, so what is untested is narrowly the cold-start re-derivation of `ALLOWED_HOSTS` in `run.sh`, not whether the kubeconfig functions. Recorded so the gap between the item's wording and its evidence is visible rather than lost.
 
 ### F7 — The cert-manager grant was dropped without the plan authorising it
 
@@ -141,7 +141,7 @@
 - **Location**: `devcontainer/k8s/rbac.yaml:47-57` (removed block, previous revision)
 - **Detail**: Phase 5's contract names exactly one removal — "The Argo CD grants are dropped". The implementation also removed the `cert-manager.io/clusterissuers` grant. The reasoning is sound and was stated in the commit (cert-manager is not installed here, and the plan excludes installing it), but it is a second undeclared removal inside a phase whose contract was written removal-by-removal. Worth naming only because this file is the FR-085 surface, where undeclared edits are exactly what review exists to catch.
 - **Fix**: none needed if intentional — record it, and restore the grant when cert-manager is installed.
-- **Decision**: PENDING
+- **Decision**: ACCEPTED (2026-08-19) — the removal stands; it was correct, just undeclared. Documented in `devcontainer/k8s/rbac.yaml` itself rather than only here, so the note sits where the next editor of that file will read it. The comment records why the grant went and what its absence costs: once cert-manager exists, the ClusterIssuer grant must be restored or the devcontainer cannot independently confirm a ClusterIssuer is present, which is precisely the "don't take the operator's word for it" property the cluster-scoped grants exist to provide.
 
 ### F8 — `flush ruleset` in `/etc/nftables.conf` destroys k3s service NAT on every reload
 
