@@ -80,7 +80,9 @@
   - **Tradeoff**: creates a second copy that can drift from the box unless deployment always goes through it; a half-adopted version of this is worse than neither, because it looks authoritative while being stale.
   - **Confidence**: high on the problem, medium on the shape — whether these belong in this repo or a separate infra repo is a real decision this review should not make.
   - **Blind spot**: did not check whether committing the AS12912 set file is wanted (it is generated and would churn weekly), nor whether the public GitHub mirror should receive infra files at all — the operator already chose to keep the substrate branch off GitHub for exactly that reason.
-- **Decision**: PENDING
+- **Decision**: PARTIALLY FIXED (2026-08-19) — recommended fix applied as far as it goes. Six files captured into `infra/tachiko/`, mirroring their host paths, verified byte-identical to the host by sha256. `/etc/nftables.d/as12912.nft` deliberately excluded (generated weekly from live BGP data; a committed copy would churn and mislead) — the script producing it is tracked instead. No credentials included; the branch stays off the public GitHub mirror.
+
+  **The finding is not fully closed.** Nothing deploys *from* this directory — it is a copy, and copy and host will drift the moment someone edits the box. The README states this explicitly rather than implying authority the directory does not have. Building the deployment path is queued in `follow-ups/review-fixes.md`. Also still absent: the k3s install invocation and the rescue-boot quota procedure, neither of which is expressible as a file to apply.
 
 ### F4 — The Prometheus chart is unpinned while HAProxy is pinned
 
@@ -95,7 +97,7 @@
   - **Tradeoff**: pinned charts need deliberate upgrades, which is work someone must remember to do.
   - **Confidence**: high — the mechanism is identical to the one already working for HAProxy.
   - **Blind spot**: the installed chart version was not read back from the Helm release, only the image tag; the exact chart version to pin must be read from the release before editing.
-- **Decision**: PENDING
+- **Decision**: FIXED (2026-08-19) — the blind spot was closed first: the chart version was read back from the Helm release secret (`chart: prometheus, version: 29.27.0, appVersion: v3.14.0`) rather than guessed from the image tag. `version: 29.27.0` added to the manifest, so it pins exactly what was already running and the reconcile was a no-op — pods kept the same names and did not restart. Both auto-deploy manifests are now pinned, matching the change's own k3s version-pinning rationale.
 
 ### F5 — The workspace quota does not constrain host-root processes
 

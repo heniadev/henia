@@ -1,0 +1,28 @@
+# HAProxy Kubernetes Ingress, installed declaratively via k3s auto-deploy.
+#
+# Matches the ingress MODEL of the existing cluster (which runs HAProxy),
+# but at the current release rather than that cluster's 1.9.0: the 1.9 line
+# ships in a chart from 2023 and predates Kubernetes 1.36 by ~3 years.
+# Recorded as an accepted deviation in the phase 4 commit.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: haproxy-ingress
+  namespace: kube-system
+spec:
+  repo: https://haproxytech.github.io/helm-charts
+  chart: kubernetes-ingress
+  version: 1.53.0
+  targetNamespace: haproxy
+  createNamespace: true
+  valuesContent: |-
+    controller:
+      kind: Deployment
+      replicaCount: 1
+      service:
+        type: LoadBalancer
+      ingressClassResource:
+        enabled: true
+        name: haproxy
+        default: true
+      ingressClass: haproxy

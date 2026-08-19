@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh the AS12912 prefix set gating the k3s API
+Documentation=https://stat.ripe.net/docs/data_api
+After=network-online.target nftables.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/refresh-as12912-set.sh
