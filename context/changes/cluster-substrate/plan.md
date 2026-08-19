@@ -656,7 +656,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 - [x] 2.2 `go vet ./...` reports nothing — 2604250
 - [x] 2.3 `make manifests generate` produces no diff on a second run — 2604250
 - [x] 2.4 The generated CRD declares group `henia.dev`, version `v1alpha1`, kind `Herd` — 2604250
-- [ ] 2.5 The CRD declares `categories: [henia]` and a shortName, and `kubectl get henia` resolves
+- [x] 2.5 The CRD declares `categories: [henia]` and a shortName, and `kubectl get henia` resolves
 - [x] 2.6 `PROJECT` records domain `henia.dev` and the private-host module path — 2604250
 
 #### Manual
@@ -706,11 +706,11 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 6.1 The operator Deployment reports `Available`
-- [ ] 6.2 The `Herd` CRD is registered and `kubectl explain herd` resolves
-- [ ] 6.3 Creating a `Herd` resource succeeds and the controller logs a reconcile
-- [ ] 6.4 A deleted operator pod is replaced and reaches `Running`
-- [ ] 6.5 The operator has resource requests and limits set
+- [x] 6.1 The operator Deployment reports `Available`
+- [x] 6.2 The `Herd` CRD is registered and `kubectl explain herd` resolves
+- [x] 6.3 Creating a `Herd` resource succeeds and the controller logs a reconcile
+- [x] 6.4 A deleted operator pod is replaced and reaches `Running`
+- [x] 6.5 The operator has resource requests and limits set
 
 #### Manual
 
