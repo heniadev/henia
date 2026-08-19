@@ -8,7 +8,7 @@
 
 - **Context**: git branch creation and workflow, in repos using the 101 change lifecycle
 - **Problem**: branch names get improvised per run — `change/devserver-setup` borrowed the toolkit's own noun instead of git convention, matching no PR template, tooling default or CI branch filter. `/101-new` explicitly does not create branches and no other skill owns the decision, so every change re-invents the name.
-- **Rule**: Name branches with a conventional git prefix — `feature/`, `bugfix/`, `hotfix/`, `docs/`, `chore/`, `release/` — followed by a kebab-case description; never invent a prefix from project vocabulary. Branch per change, merged via pull request rather than committed to the default branch.
+- **Rule**: Name branches with a conventional git prefix — `feature/`, `bugfix/`, `hotfix/`, `docs/`, `chore/`, `release/` — followed by a kebab-case description; never invent a prefix from project vocabulary. Branch per change, merged via pull request rather than committed to the default branch — except appends to this register (`context/foundation/lessons.md`), which may be committed directly to the default branch.
 - **Applies to**: implement, impl-review
 
 ## Sync every slice and change folder to its Gitea ticket at commit time
