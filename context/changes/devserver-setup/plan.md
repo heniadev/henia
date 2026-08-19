@@ -526,30 +526,30 @@ that matters.
 
 #### Automated
 
-- [x] 2.1 `nft list ruleset` shows input policy `drop` with the four accept rules
-- [x] 2.2 `systemctl is-enabled nftables` reports `enabled`
-- [x] 2.3 The AS12912 set is non-empty and contains `46.205.216.0/21`
-- [x] 2.4 Port 22 is reachable from the devcontainer
-- [x] 2.5 The refresh script runs and produces a set of the expected shape
+- [x] 2.1 `nft list ruleset` shows input policy `drop` with the four accept rules — 3a73e54
+- [x] 2.2 `systemctl is-enabled nftables` reports `enabled` — 3a73e54
+- [x] 2.3 The AS12912 set is non-empty and contains `46.205.216.0/21` — 3a73e54
+- [x] 2.4 Port 22 is reachable from the devcontainer — 3a73e54
+- [x] 2.5 The refresh script runs and produces a set of the expected shape — 3a73e54
 
 #### Manual
 
-- [x] 2.6 An existing SSH session survives loading the ruleset
-- [x] 2.7 A fresh SSH connection succeeds after `systemctl enable --now nftables`
+- [x] 2.6 An existing SSH session survives loading the ruleset — 3a73e54
+- [x] 2.7 A fresh SSH connection succeeds after `systemctl enable --now nftables` — 3a73e54
 
 ### Phase 3: k3s install, pinned
 
 #### Automated
 
-- [ ] 3.1 `/version` on the API server reports `v1.36.3+k3s1`
-- [ ] 3.2 The single node reports `Ready`
-- [ ] 3.3 `local-path` exists and is the default StorageClass
-- [ ] 3.4 No Traefik deployment, service or HelmChart exists
-- [ ] 3.5 A pod resolves and reaches `git.tobiko.kondi.net` over HTTPS
+- [x] 3.1 `/version` on the API server reports `v1.36.3+k3s1`
+- [x] 3.2 The single node reports `Ready`
+- [x] 3.3 `local-path` exists and is the default StorageClass
+- [x] 3.4 No Traefik deployment, service or HelmChart exists
+- [x] 3.5 A pod resolves and reaches `git.tobiko.kondi.net` over HTTPS
 
 #### Manual
 
-- [ ] 3.6 The API server is reachable from the devcontainer and refused from outside AS12912
+- [x] 3.6 The API server is reachable from the devcontainer and refused from outside AS12912
 
 ### Phase 4: HAProxy ingress
 
