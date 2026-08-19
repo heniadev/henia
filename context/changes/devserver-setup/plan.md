@@ -555,23 +555,23 @@ that matters.
 
 #### Automated
 
-- [x] 4.1 The controller pods reach `Ready`
-- [x] 4.2 IngressClass `haproxy` exists and is marked default
-- [x] 4.3 A test Ingress returns HTTP 200 with the expected body
+- [x] 4.1 The controller pods reach `Ready` — 5165b44
+- [x] 4.2 IngressClass `haproxy` exists and is marked default — 5165b44
+- [x] 4.3 A test Ingress returns HTTP 200 with the expected body — 5165b44
 
 #### Manual
 
-- [x] 4.4 Hostname-based routing resolves from outside the host
+- [x] 4.4 Hostname-based routing resolves from outside the host — 5165b44
 
 ### Phase 5: Read-only cluster identity (FR-085)
 
 #### Automated
 
-- [ ] 5.1 The identity can list pods across all namespaces
-- [ ] 5.2 Creating and deleting a resource are both denied with 403
-- [ ] 5.3 Reading a Secret's contents is denied
-- [ ] 5.4 StorageClasses and IngressClasses are readable
-- [ ] 5.5 `kubectl` from the devcontainer reaches the cluster with the regenerated kubeconfig
+- [x] 5.1 The identity can list pods across all namespaces
+- [x] 5.2 Creating and deleting a resource are both denied with 403
+- [x] 5.3 Reading a Secret's contents is denied
+- [x] 5.4 StorageClasses and IngressClasses are readable
+- [x] 5.5 `kubectl` from the devcontainer reaches the cluster with the regenerated kubeconfig
 
 #### Manual
 

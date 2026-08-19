@@ -2,10 +2,17 @@
 # k3s cluster (not from inside the devcontainer — it has no cluster access
 # until this exists): `kubectl apply -f devcontainer/k8s/rbac.yaml`.
 #
+# Targets the Henia project cluster on tachiko (88.99.160.8). This is the
+# concrete form of FR-085: the framework can read the state of the running
+# platform without being able to change it.
+#
 # Binds to the built-in `view` ClusterRole, which grants get/list/watch on
 # most objects cluster-wide but deliberately excludes Secret *contents* —
 # the devcontainer can see that a Secret exists, not read it. Deploys happen
-# via git + Argo CD watching the repo; this identity is read-back only.
+# via git and a reconciler watching the repo; this identity is read-back only.
+#
+# No verb outside get/list/watch appears anywhere in this file. That is the
+# invariant worth checking on every edit.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -30,46 +37,18 @@ roleRef:
   name: view
   apiGroup: rbac.authorization.k8s.io
 ---
-# The built-in `view` ClusterRole only aggregates resources whose CRD carries
-# the `rbac.authorization.k8s.io/aggregate-to-view: "true"` label — Argo CD's
-# CRDs don't, so `view` alone can't see Applications/AppProjects even though
-# it can see everything else. This adds that read-only slice explicitly,
-# still get/list/watch only, same as `view`. Needed for the deploy plan's
-# step-6 checks (`kubectl get applications.argoproj.io` / `argocd app list`
-# equivalents) to work from this identity.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: claude-devcontainer-argocd-view
-rules:
-  - apiGroups: ["argoproj.io"]
-    resources:
-      - applications
-      - appprojects
-      - applicationsets
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: claude-devcontainer-argocd-view
-subjects:
-  - kind: ServiceAccount
-    name: claude-devcontainer
-    namespace: claude-devcontainer
-roleRef:
-  kind: ClusterRole
-  name: claude-devcontainer-argocd-view
-  apiGroup: rbac.authorization.k8s.io
----
-# `view` only grants read access to namespaced resources — StorageClass,
-# IngressClass, and cert-manager's ClusterIssuer are all cluster-scoped
-# (same reason `nodes` is forbidden under plain `view`), so they need their
-# own explicit grant, same shape as the argocd-view addition above: still
-# get/list/watch only. This lets the devcontainer independently confirm
-# deploy-plan placeholders — an encrypted StorageClass exists, a default
-# IngressClass exists, the `letsencrypt` ClusterIssuer exists — instead of
-# taking the operator's word for it.
+# `view` only grants read access to namespaced resources — StorageClass and
+# IngressClass are cluster-scoped (the same reason `nodes` is forbidden under
+# plain `view`), so they need their own explicit grant. Still get/list/watch
+# only. This lets the devcontainer independently confirm substrate facts —
+# that local-path is the default StorageClass, that a default IngressClass
+# exists — instead of taking the operator's word for it.
+#
+# The previous revision of this file also granted Argo CD resources
+# (applications, appprojects, applicationsets) and cert-manager
+# ClusterIssuers. Both were dropped when this identity moved to tachiko:
+# neither component is installed on this cluster, and a grant for an absent
+# API group is dead configuration that outlives the reason for it.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -80,9 +59,6 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingressclasses"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["cert-manager.io"]
-    resources: ["clusterissuers"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
