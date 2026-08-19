@@ -567,11 +567,11 @@ that matters.
 
 #### Automated
 
-- [x] 5.1 The identity can list pods across all namespaces
-- [x] 5.2 Creating and deleting a resource are both denied with 403
-- [x] 5.3 Reading a Secret's contents is denied
-- [x] 5.4 StorageClasses and IngressClasses are readable
-- [x] 5.5 `kubectl` from the devcontainer reaches the cluster with the regenerated kubeconfig
+- [x] 5.1 The identity can list pods across all namespaces — 7617b99
+- [x] 5.2 Creating and deleting a resource are both denied with 403 — 7617b99
+- [x] 5.3 Reading a Secret's contents is denied — 7617b99
+- [x] 5.4 StorageClasses and IngressClasses are readable — 7617b99
+- [x] 5.5 `kubectl` from the devcontainer reaches the cluster with the regenerated kubeconfig — 7617b99
 
 #### Manual
 
@@ -581,10 +581,10 @@ that matters.
 
 #### Automated
 
-- [ ] 6.1 Prometheus pods reach `Ready`
-- [ ] 6.2 `/-/healthy` returns HTTP 200
-- [ ] 6.3 Targets for kubelet and API server report `up`
-- [ ] 6.4 The Prometheus PVC is bound on `local-path`
+- [x] 6.1 Prometheus pods reach `Ready`
+- [x] 6.2 `/-/healthy` returns HTTP 200
+- [x] 6.3 Targets for kubelet and API server report `up`
+- [x] 6.4 The Prometheus PVC is bound on `local-path`
 
 #### Manual
 
