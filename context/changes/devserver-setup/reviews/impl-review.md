@@ -6,7 +6,7 @@
 - **Date**: 2026-08-19
 - **Diff basis**: Progress SHAs (`3e6f331..36b169f`, plus `ca4878c`; closing commit `34c2ceb`). All 36 items carry commit ids, so the primary anchor applied — no fallback needed.
 - **Verdict**: REWORK REQUIRED
-- **Findings**: 1 critical, 3 warnings, 3 observations
+- **Findings**: 2 critical, 3 warnings, 3 observations (F8 added during triage, after the initial save)
 
 > Harness note: this skill specifies two parallel read-only subagents for drift and safety scanning. This session operates under a standing instruction not to spawn subagents unless explicitly requested, so both passes were performed inline. The changed set is 8 files plus host state, well inside what one context holds, so the context-discipline rationale for delegation does not bind here. Recorded because it is a deviation from the harness, not from the criteria.
 
@@ -46,7 +46,13 @@
   - **Tradeoff**: introduces a credential to manage and rotate, over plain HTTP until cert-manager exists — so the credential itself travels in the clear. That is a worse posture than Fix A until TLS lands.
   - **Confidence**: medium. The HAProxy chart supports auth annotations, but the exact annotation set for controller 3.2.13 was not verified on this cluster.
   - **Blind spot**: no check of whether basic-auth interferes with Prometheus's own API clients later (the FR-270 collector contract assumes something scrapes it).
-- **Decision**: FIXED (2026-08-19) — Fix A applied. `/etc/nftables.conf` rule changed from `tcp dport { 80, 443 } accept` to `tcp dport { 80, 443 } ip saddr @as12912_v4 accept`, so the ingress is now gated by the same set as 6443. Verified from inside AS12912: Prometheus `/-/healthy` still returns 200 and ports 22/80/6443 remain open. **Not yet verified from outside AS12912** — that needs the operator's second vantage point (`10.242.0.10`), the same one that confirmed the 6443 restriction. Until that check runs, the block is asserted from the rule text, not observed. Note the carve-out this creates: anything intended to be genuinely public before the 2026-10-22 conference now needs its own rule.
+- **Decision**: NOT FIXED (2026-08-19) — reopened after the operator tested from outside AS12912 and got `HTTP/1.1 200 OK` from `10.242.0.10`. Prometheus remains world-readable. Three things were established while attempting the fix, and they constrain any future attempt:
+
+  1. **Fix A as written cannot work.** k3s DNATs 80/443 to the ingress pod at PREROUTING (`KUBE-SERVICES -d 88.99.160.8/32 --dport 80 -j KUBE-EXT-…`). Those packets are then *forwarded*, never traversing the `input` chain, so an `input` rule can gate 6443 (a host-local listener, which is why that restriction genuinely works) but can never gate the ingress. The rule was verified as correct text sitting in a chain the traffic does not use.
+  2. **A `prerouting` filter chain at `mangle` priority does work** — it runs after conntrack and before dstnat, so it still sees the true external port. Verified: added incrementally, in-AS access preserved at 200, and a temporary self-block rule did sever the connection, proving the drop path functions.
+  3. **But persisting it through `/etc/nftables.conf` is hazardous.** That file opens with `flush ruleset`, which flushes *every table in every family* — including the `iptables-nft` KUBE-* NAT tables. Every reload therefore destroys k3s's service NAT. kube-proxy did **not** resync on its own; `KUBE-EXT` sat at 0 and the ingress stayed down until `systemctl restart k3s` rebuilt it. This caused a real outage during the review session, recorded as **F8** below.
+
+  Consequence for the fix choice: a durable answer should live where firewall reloads cannot reach it — a HAProxy ingress allowlist annotation, or authentication in front of Prometheus (the report's original Fix B) — rather than in nftables. Pending the operator's decision.
 
 ### F2 — Pod/service CIDR accepts are not interface-bound, so they are spoofable and bypass the 6443 restriction
 
@@ -127,6 +133,23 @@
 - **Location**: `devcontainer/k8s/rbac.yaml:47-57` (removed block, previous revision)
 - **Detail**: Phase 5's contract names exactly one removal — "The Argo CD grants are dropped". The implementation also removed the `cert-manager.io/clusterissuers` grant. The reasoning is sound and was stated in the commit (cert-manager is not installed here, and the plan excludes installing it), but it is a second undeclared removal inside a phase whose contract was written removal-by-removal. Worth naming only because this file is the FR-085 surface, where undeclared edits are exactly what review exists to catch.
 - **Fix**: none needed if intentional — record it, and restore the grant when cert-manager is installed.
+- **Decision**: PENDING
+
+### F8 — `flush ruleset` in `/etc/nftables.conf` destroys k3s service NAT on every reload
+
+- **Severity**: 🔴 CRITICAL
+- **Impact**: 🧠 HIGH
+- **Dimension**: Safety & Quality
+- **Location**: host `/etc/nftables.conf:11` (`flush ruleset`), tracked copy `infra/tachiko/etc/nftables.conf`
+- **Detail**: Found during F1 triage, not present in the original review. `flush ruleset` is the conventional opening of an nftables config, but on a k3s node it is destructive: it flushes every table in every family, including the `iptables-nft` tables kube-proxy owns. Observed directly — after a reload, `iptables -t nat -S | grep -c KUBE-EXT` went from 30 to **0**, ingress returned `HTTP 000` from both the host and off-box, and kube-proxy did not rebuild the rules on its own. Recovery required `systemctl restart k3s`, after which the count returned to 30 within 5 seconds.
+
+  This makes every firewall change a potential cluster-networking outage, which is exactly the kind of coupling the operator will not remember six weeks from now. It also means the phase 2 ruleset, as tracked, is unsafe to reload on a running cluster — including at boot, where ordering between `nftables.service` (sysinit) and `k3s.service` (multi-user) happens to save it today.
+- **Fix A ⭐ Recommended** — scope the flush to this table only
+  - **Approach**: replace `flush ruleset` with `table inet filter { }` + `delete table inet filter` (or `flush table inet filter`), leaving other families untouched.
+  - **Strength**: keeps reloads idempotent for our own rules while never touching kube-proxy's tables; a two-line change to a file already tracked in the repo.
+  - **Tradeoff**: no longer a clean-slate reload, so stale rules in *other* tables we might add later would survive a reload and need explicit removal.
+  - **Confidence**: high on the diagnosis — the counter going 30 → 0 across a reload, and recovery on k3s restart, is direct evidence. Medium on the exact replacement syntax being drop-in; it needs a `nft -c -f` check and one reload test with the KUBE-EXT count watched.
+  - **Blind spot**: not tested across a reboot, where service ordering rather than reload semantics decides the outcome. Also not checked whether anything else on the host owns nftables tables.
 - **Decision**: PENDING
 
 ## Automated Verification (re-run during review)
