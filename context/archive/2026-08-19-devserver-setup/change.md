@@ -1,10 +1,10 @@
 ---
 change_id: devserver-setup
 title: Devserver setup
-status: reviewed
+status: archived
 created: 2026-08-19
 updated: 2026-08-19
-archived_at:
+archived_at: 2026-08-19T12:00:17Z
 ---
 
 ## Notes
