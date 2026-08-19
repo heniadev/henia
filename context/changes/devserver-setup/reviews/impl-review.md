@@ -54,6 +54,14 @@
 
   Consequence for the fix choice: a durable answer should live where firewall reloads cannot reach it — a HAProxy ingress allowlist annotation, or authentication in front of Prometheus (the report's original Fix B) — rather than in nftables. Pending the operator's decision.
 
+  **FIXED (2026-08-19), via Fix B — basic auth.** The operator chose authentication over an address restriction, which also survives their carrier-assigned egress changing. Implemented as `haproxy.org/auth-type: basic-auth` + `haproxy.org/auth-secret: monitoring/prometheus-basic-auth` on the Prometheus Ingress, set through the chart's `server.ingress.annotations` so it lives in the tracked manifest. Enforced by the ingress controller, so it is immune to both the DNAT path and the flush-ruleset hazard that defeated the two nftables attempts.
+
+  First attempt stored a plaintext password and failed closed — 401 for everyone, including valid credentials. The controller expects a crypt hash; the Secret now holds a SHA-512 crypt (`openssl passwd -6`). The plaintext lives only in `/root/prometheus-basic-auth.txt` (mode 0600) on the host and was never printed into the session transcript.
+
+  Verified from the devcontainer over the public path — all three endpoints that previously leaked now refuse anonymously: `/-/healthy` 401, `/api/v1/query?query=kube_secret_info` 401, `/api/v1/label/__name__/values` 401. Verified on-box with credentials: 200, and a live query returns data.
+
+  **Residual risk, deliberately accepted**: there is no TLS (cert-manager is a declared exclusion of this change), so the credential travels in clear text over HTTP. That is a weaker posture than an address restriction would have been, and it is the tradeoff the report named under Fix B. It should be revisited when cert-manager lands.
+
 ### F2 — Pod/service CIDR accepts are not interface-bound, so they are spoofable and bypass the 6443 restriction
 
 - **Severity**: ⚠️ WARNING
@@ -150,7 +158,7 @@
   - **Tradeoff**: no longer a clean-slate reload, so stale rules in *other* tables we might add later would survive a reload and need explicit removal.
   - **Confidence**: high on the diagnosis — the counter going 30 → 0 across a reload, and recovery on k3s restart, is direct evidence. Medium on the exact replacement syntax being drop-in; it needs a `nft -c -f` check and one reload test with the KUBE-EXT count watched.
   - **Blind spot**: not tested across a reboot, where service ordering rather than reload semantics decides the outcome. Also not checked whether anything else on the host owns nftables tables.
-- **Decision**: PENDING
+- **Decision**: FIXED (2026-08-19) — Fix A applied. `flush ruleset` replaced with `table inet filter` / `delete table inet filter`, scoping the reset to our own table. Proven by re-running the exact operation that caused the outage: `KUBE-EXT` count stayed at **30 across the reload** (previously 30 → 0), our three chains rebuilt, the AS12912 set repopulated to 30 entries, and the ingress stayed at 200 throughout. The stated blind spot stands — this was a reload test, not a reboot test, so boot-ordering between `nftables.service` and `k3s.service` remains unverified.
 
 ## Automated Verification (re-run during review)
 

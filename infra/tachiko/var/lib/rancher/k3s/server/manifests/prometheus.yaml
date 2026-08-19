@@ -34,5 +34,13 @@ spec:
       ingress:
         enabled: true
         ingressClassName: haproxy
+        # Review finding F1: without this the collector was world-readable,
+        # exposing 1538 metric names and Secret names/namespaces to anyone.
+        # Enforced by the ingress controller, so it is unaffected by DNAT and
+        # by nftables reloads. The referenced Secret is created out-of-band and
+        # is deliberately NOT tracked in git.
+        annotations:
+          haproxy.org/auth-type: "basic-auth"
+          haproxy.org/auth-secret: "monitoring/prometheus-basic-auth"
         hosts:
           - prometheus.tachiko.kondi.net
