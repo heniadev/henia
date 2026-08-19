@@ -1,6 +1,7 @@
 ---
 project: "Henia"
 researched_at: 2026-08-18
+hardware_verified_at: 2026-08-19
 recommended_platform: hetzner-auction-dedicated-k3s
 runner_up: digitalocean-doks
 context_type: mvp
@@ -48,6 +49,43 @@ ongoing time, against a nine-week deadline where the product is the deliverable
 (guide checked 2026-08-18 puts initial setup at "several days"). The purchase is
 a fact and this document is written against it; the tension is real and appears
 in the risk register rather than being argued away.
+
+## Delivered hardware
+
+The machine ordered on 2026-08-18 was delivered and inspected over SSH on
+**2026-08-19**. Everything in this section is a direct observation from that
+machine, not a listing claim. It supersedes the per-listing uncertainties
+recorded under *Unknown Unknowns*.
+
+**`tachiko.kondi.net` — 88.99.160.8**, Ubuntu 26.04 LTS, kernel 7.0.0-22.
+
+| Facet | Observed |
+| --- | --- |
+| CPU | Intel i7-8700, 6 cores / 12 threads, `vmx` present |
+| Memory | 62 GiB usable (4 × 16 GB DDR4) — **non-ECC** |
+| Storage | 2 × 954 GB NVMe, **mdraid RAID1**, arrays `md0` swap / `md1` `/boot` / `md2` `/`, all clean `[UU]` |
+| Capacity | `/` is 905 GB with 857 GB free; both disks fully partitioned, no unallocated space |
+| Virtualisation | `/dev/kvm` present, `kvm_intel` loaded, nested virtualisation on |
+| Installed | nothing — no container runtime, no k3s, no application code; sshd is the only listening service |
+| Firewall | **none active** — no ufw, no nftables ruleset |
+
+Three consequences for decisions already recorded:
+
+- **Redundant storage exists**, which the roadmap listed as an open unknown and
+  this document listed as a per-listing fact. Node-local storage is mirrored,
+  so the *Storage: node-local* decision carries less exposure than written.
+- **Virtink's hardware requirement is satisfied.** The capability argument that
+  selected bare metal over managed Kubernetes holds on the actual machine, not
+  only in principle. The cluster-side requirements —
+  `--allow-privileged=true` and the privileged DaemonSet — remain untested until
+  k3s is installed.
+- **No LVM, and none needed.** Storage is plain mdraid plus ext4 with no volume
+  manager, and both disks are fully allocated with no free extents. Since the
+  storage decision is k3s local-path-provisioner writing into a directory on
+  `/`, introducing LVM would require a reinstall to buy flexibility nothing in
+  this plan asks for. Recorded so the question is not reopened without a reason.
+  The capacity boundary that LVM would have provided is better bought with an
+  ext4 project quota on the local-path directory — see the risk register.
 
 ## Platform Comparison
 
@@ -163,6 +201,8 @@ showing it.
   configuration, disk type and ECC support vary per listing, and `installimage`
   defaults are not uniform across them. Whether you have software RAID across two
   disks or a single unprotected disk is a fact about your specific machine.
+  *Resolved 2026-08-19 by inspection — see § Delivered hardware: software RAID1
+  across two NVMe disks (good), and no ECC (a new risk, registered below).*
 - **Virtink's documented cert-manager range is v1.0 to v1.8.** A current
   cert-manager install is well past that ceiling. This surfaces at install time,
   not before.
@@ -215,12 +255,15 @@ as the documented fallback if hardware or contention forces a move.
 | Risk | Source | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- | --- |
 | Resource contention takes down the control plane, because agents and k3s share one machine | pre-mortem | High | High | Set memory limits and reservations before the first parallel-agent test, not after; reserve headroom for the control plane; treat FR-280's concurrency limit as a resource decision, not only a cost one |
-| Refurbished disk or component fails inside the nine weeks | devil's advocate | Medium | High | Confirm the RAID configuration of the specific machine at install; back up the k3s datastore off-box daily; know that auction support is lower priority and budget days, not hours |
+| Refurbished disk or component fails inside the nine weeks | devil's advocate | Medium | **Medium** (was High) | RAID configuration confirmed 2026-08-19 — RAID1 across both NVMes, so a single disk failure degrades rather than destroys. Still: back up the k3s datastore off-box daily, and know that auction support is lower priority, so budget days rather than hours for a replacement |
+| Memory is non-ECC, so bit flips corrupt silently rather than being caught | delivered hardware, 2026-08-19 | Low | High | Accept — it cannot be fixed on this machine. Weigh it when sizing agent concurrency, because this box's dominant risk is already memory pressure; corruption in the k3s datastore is the expensive case, which is another reason for off-box datastore backups that are verified rather than assumed |
+| No host firewall exists, while the perimeter is the whole access-protection model | delivered hardware, 2026-08-19 | High | High | Harmless today — sshd is the only listener and 6443 is unbound — and dangerous the moment k3s starts. Put the ruleset in place as part of F-01, before the API server first listens, not after |
+| Agent workspaces exhaust the root filesystem and take the control plane with them | delivered hardware, 2026-08-19 | Medium | **Medium** (was High) | k3s local-path-provisioner does **not** enforce PVC capacity — it is a directory on `/`, the same filesystem as the k3s datastore, so this is the top contention risk arriving by disk instead of RAM. **Mitigated 2026-08-19**: ext4 project quota (project 1000) caps `/var/lib/rancher/k3s/storage` at 200 GiB, enforcement verified by exceeding it deliberately. **The cap binds pods, not the host** — the kernel exempts processes holding `CAP_SYS_RESOURCE`, so a runaway root process on the host is still unbounded; container runtimes drop that capability, which is why the agent-workspace case the risk describes is covered. Alerting on root usage is still worth adding |
 | Single point of failure — no HA, nowhere to reschedule | devil's advocate | Medium | High | Keep DOKS as a tested fallback rather than a theoretical one; rehearse the demo from a second environment at least once |
 | Operational effort displaces product work against a fixed date | devil's advocate | High | Medium | Timebox cluster setup explicitly; anything not needed for the eight-step loop is post-conference |
 | Virtink's cert-manager ceiling (v1.0–v1.8) conflicts with a current install | unknown unknowns | Medium | Medium | Check the supported range before installing cert-manager, not after; pin deliberately |
 | Wrong Tekton track installed — operator LTS (Pipeline v1.6.x) instead of current v1.13.0 | unknown unknowns | Medium | Medium | Choose the track explicitly and record which; verify the API fields you depend on exist in that track |
-| Agent workspaces on unprotected node-local storage | devil's advocate | Medium | Medium | Treat workspaces as disposable — FR-240 already requires stopping into a recoverable state, and FR-330 allows removal; do not let anything durable accumulate there |
+| Agent workspaces on node-local storage | devil's advocate | Medium | **Low** (was Medium) | "Unprotected" turned out to be wrong: the storage is RAID1-mirrored (verified 2026-08-19), so this is now about durability of the *contents*, not the disk. Treat workspaces as disposable — FR-240 already requires stopping into a recoverable state, and FR-330 allows removal; do not let anything durable accumulate there. The live concern moved to the disk-exhaustion row above |
 | Client-go ahead of the API server if k3s is pinned below Kubernetes 1.36 | research | Low | Medium | Pin k3s to a version at or near what kubebuilder v4.15.0 targets |
 | One public address serving Gitea, Tekton, GUI and metrics | unknown unknowns | Medium | Low | Get hostname-routed ingress and certificates working before anything needs demonstrating remotely |
 
