@@ -1,7 +1,7 @@
 ---
 change_id: devserver-setup
 title: Devserver setup
-status: implementing
+status: implemented
 created: 2026-08-19
 updated: 2026-08-19
 archived_at:

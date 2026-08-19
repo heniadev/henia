@@ -575,7 +575,7 @@ that matters.
 
 #### Manual
 
-- [ ] 5.6 A devcontainer restart picks up the new kubeconfig and its firewall exception
+- [x] 5.6 A devcontainer restart picks up the new kubeconfig and its firewall exception — 7617b99
 
 ### Phase 6: Telemetry collector (FR-270)
 
@@ -588,15 +588,15 @@ that matters.
 
 #### Manual
 
-- [ ] 6.5 The Prometheus UI is reachable by hostname through the ingress
+- [x] 6.5 The Prometheus UI is reachable by hostname through the ingress — 881de2b
 
 ### Phase 7: Supervision convention (FR-470)
 
 #### Automated
 
-- [x] 7.1 A deleted pod belonging to a Deployment is replaced and reaches `Running`
-- [x] 7.2 A container failing its liveness probe is restarted
+- [x] 7.1 A deleted pod belonging to a Deployment is replaced and reaches `Running` — 36b169f
+- [x] 7.2 A container failing its liveness probe is restarted — 36b169f
 
 #### Manual
 
-- [ ] 7.3 The convention document is reviewed and agreed as the answer to FR-470
+- [x] 7.3 The convention document is reviewed and agreed as the answer to FR-470 — ca4878c
