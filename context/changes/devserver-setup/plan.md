@@ -513,29 +513,29 @@ that matters.
 
 #### Automated
 
-- [x] 1.1 `findmnt -no OPTIONS /` contains `prjquota`
-- [x] 1.2 `tune2fs -l /dev/md2` lists both `quota` and `project` features
-- [x] 1.3 `repquota -P /` reports project 1000 with a 200 GiB block limit
-- [x] 1.4 Writing past the limit fails with a quota error rather than filling the disk
+- [x] 1.1 `findmnt -no OPTIONS /` contains `prjquota` — d44385d
+- [x] 1.2 `tune2fs -l /dev/md2` lists both `quota` and `project` features — d44385d
+- [x] 1.3 `repquota -P /` reports project 1000 with a 200 GiB block limit — d44385d
+- [x] 1.4 Writing past the limit fails with a quota error rather than filling the disk — d44385d
 
 #### Manual
 
-- [x] 1.5 The machine boots unattended with the new fstab
+- [x] 1.5 The machine boots unattended with the new fstab — d44385d
 
 ### Phase 2: Host firewall
 
 #### Automated
 
-- [ ] 2.1 `nft list ruleset` shows input policy `drop` with the four accept rules
-- [ ] 2.2 `systemctl is-enabled nftables` reports `enabled`
-- [ ] 2.3 The AS12912 set is non-empty and contains `46.205.216.0/21`
-- [ ] 2.4 Port 22 is reachable from the devcontainer
-- [ ] 2.5 The refresh script runs and produces a set of the expected shape
+- [x] 2.1 `nft list ruleset` shows input policy `drop` with the four accept rules
+- [x] 2.2 `systemctl is-enabled nftables` reports `enabled`
+- [x] 2.3 The AS12912 set is non-empty and contains `46.205.216.0/21`
+- [x] 2.4 Port 22 is reachable from the devcontainer
+- [x] 2.5 The refresh script runs and produces a set of the expected shape
 
 #### Manual
 
-- [ ] 2.6 An existing SSH session survives loading the ruleset
-- [ ] 2.7 A fresh SSH connection succeeds after `systemctl enable --now nftables`
+- [x] 2.6 An existing SSH session survives loading the ruleset
+- [x] 2.7 A fresh SSH connection succeeds after `systemctl enable --now nftables`
 
 ### Phase 3: k3s install, pinned
 
