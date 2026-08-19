@@ -1,0 +1,9 @@
+apiVersion: henia.dev/v1alpha1
+kind: Herd
+metadata:
+  labels:
+    app.kubernetes.io/name: henia
+    app.kubernetes.io/managed-by: kustomize
+  name: herd-sample
+spec:
+  # TODO(user): Add fields here

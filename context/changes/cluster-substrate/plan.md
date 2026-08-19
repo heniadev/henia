@@ -638,8 +638,8 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [x] 1.1 `droast` reports no errors on the edited `devcontainer/Dockerfile`
-- [x] 1.2 The pinned Go 1.26 and kubebuilder v4.15.0 download URLs resolve
+- [x] 1.1 `droast` reports no errors on the edited `devcontainer/Dockerfile` — 34f444a
+- [x] 1.2 The pinned Go 1.26 and kubebuilder v4.15.0 download URLs resolve — 34f444a
 
 #### Manual
 
@@ -652,12 +652,12 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Automated
 
-- [ ] 2.1 `go build ./...` succeeds
-- [ ] 2.2 `go vet ./...` reports nothing
-- [ ] 2.3 `make manifests generate` produces no diff on a second run
-- [ ] 2.4 The generated CRD declares group `henia.dev`, version `v1alpha1`, kind `Herd`
+- [x] 2.1 `go build ./...` succeeds
+- [x] 2.2 `go vet ./...` reports nothing
+- [x] 2.3 `make manifests generate` produces no diff on a second run
+- [x] 2.4 The generated CRD declares group `henia.dev`, version `v1alpha1`, kind `Herd`
 - [ ] 2.5 The CRD declares `categories: [henia]` and a shortName, and `kubectl get henia` resolves
-- [ ] 2.6 `PROJECT` records domain `henia.dev` and the private-host module path
+- [x] 2.6 `PROJECT` records domain `henia.dev` and the private-host module path
 
 #### Manual
 

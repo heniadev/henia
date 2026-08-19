@@ -14,3 +14,19 @@ devcontainer/kubeconfig.yaml
 # Upstream checkouts kept for reference, not vendored. Copy what we adopt
 # into the tree proper (with attribution) rather than committing the clones.
 3rd_party/
+
+# Go operator build artefacts (kubebuilder scaffold, cluster-substrate change).
+# Merged in rather than overwriting this file — kubebuilder ships its own
+# .gitignore at the project root, and this repo's root already had one.
+bin/*
+Dockerfile.cross
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+!vendor/**/zz_generated.*
+*.kubeconfig
