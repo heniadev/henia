@@ -17,3 +17,10 @@
 - **Problem**: the ticket board goes stale and nobody trusts it — slices move, tickets don't, and Gitea stops reflecting real state
 - **Rule**: When a commit creates or edits a roadmap slice or a file under `context/changes/<change-id>/`, update the corresponding Gitea issue in that same commit — creating the issue if it does not exist — so its title, body and status match the committed artifact, and cite the issue number in the commit message.
 - **Applies to**: roadmap, plan, implement, impl-review
+
+## Give each concurrent agent its own git worktree
+
+- **Context**: concurrent devcontainer instances (`DEVCONTAINER_INSTANCE=<name>`) operating on the same git repository
+- **Problem**: a shared checkout serializes the work — agents cannot run in parallel because branch switches and staged changes in one instance disrupt every other instance using the same tree
+- **Rule**: Give each concurrently running devcontainer instance its own `git worktree` rather than sharing one checkout. Never switch branches or stage changes in a tree another instance is working in.
+- **Applies to**: all
