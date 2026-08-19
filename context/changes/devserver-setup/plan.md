@@ -581,10 +581,10 @@ that matters.
 
 #### Automated
 
-- [x] 6.1 Prometheus pods reach `Ready`
-- [x] 6.2 `/-/healthy` returns HTTP 200
-- [x] 6.3 Targets for kubelet and API server report `up`
-- [x] 6.4 The Prometheus PVC is bound on `local-path`
+- [x] 6.1 Prometheus pods reach `Ready` — 881de2b
+- [x] 6.2 `/-/healthy` returns HTTP 200 — 881de2b
+- [x] 6.3 Targets for kubelet and API server report `up` — 881de2b
+- [x] 6.4 The Prometheus PVC is bound on `local-path` — 881de2b
 
 #### Manual
 
@@ -594,8 +594,8 @@ that matters.
 
 #### Automated
 
-- [ ] 7.1 A deleted pod belonging to a Deployment is replaced and reaches `Running`
-- [ ] 7.2 A container failing its liveness probe is restarted
+- [x] 7.1 A deleted pod belonging to a Deployment is replaced and reaches `Running`
+- [x] 7.2 A container failing its liveness probe is restarted
 
 #### Manual
 
