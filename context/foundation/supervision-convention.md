@@ -43,6 +43,38 @@ Concretely:
   supervisor-initiated restart would bypass that guarantee. This boundary is the
   reason the convention has to be written down rather than assumed.
 
+## Where the operator takes over
+
+The convention above holds **up to the boundary of `henia-operator`**. k3s
+supervises *processes*: it knows whether a container is running and whether it
+answers a probe. It cannot know whether a Henia instance is doing anything
+useful.
+
+Where application-level checks on a `henia-instance` are possible, **the
+operator performs them** rather than delegating them to the platform. The
+reference model is the Operator Framework's capability levels
+(https://sdk.operatorframework.io/docs/overview/operator-capabilities/):
+
+| Level | What it covers | Who owns it here |
+| --- | --- | --- |
+| I–II — basic install, seamless upgrades | installing and updating an instance's components | operator |
+| III — full lifecycle | backup, failure recovery, lifecycle beyond restart-in-place | operator |
+| IV — deep insights | metrics, alerting, workload analysis of the instance itself | operator, published for FR-270's collector |
+| V — auto pilot | auto-healing and auto-tuning driven by those insights | operator |
+
+The platform's liveness definition therefore stays deliberately shallow, and
+that shallowness is not a gap to be filled by adding probes — it is the seam.
+Anything that requires knowing what a Henia instance *means* (is the loop
+progressing, is a unit of work stuck, is an agent burning budget without
+output) is operator territory, reached through FR-112's observation path and
+surfaced via FR-270, not through kubelet probes.
+
+Practical consequence for probe design: liveness probes should test that the
+process is alive, never that the work is going well. A liveness probe wired to
+a progress signal converts a stalled loop into a restart loop, which destroys
+the evidence needed to diagnose it and bypasses FR-240's stop-into-a-
+recoverable-condition guarantee.
+
 ## What was demonstrated
 
 On tachiko, 2026-08-19, with a throwaway Deployment (removed afterwards):
