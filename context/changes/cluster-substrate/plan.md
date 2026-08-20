@@ -675,7 +675,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 3.6 The Harbor UI is reachable and the admin credential works
+- [x] 3.6 The Harbor UI is reachable and the admin credential works — 81c527e
 
 ### Phase 4: Tekton Pipelines
 
@@ -714,7 +714,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 6.6 The supervision convention still describes what the cluster actually does
+- [x] 6.6 The supervision convention still describes what the cluster actually does
 
 ### Phase 7: Telemetry (FR-270)
 
@@ -739,4 +739,4 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 8.5 F-01's outcome statement is agreed as satisfied
+- [x] 8.5 F-01's outcome statement is agreed as satisfied

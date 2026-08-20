@@ -42,6 +42,16 @@ spec:
           - source_labels: [__meta_kubernetes_service_name]
             regex: henia-controller-manager-metrics-service
             action: keep
+          # Keep ONLY the Service's named port. The endpoints role also
+          # discovers every declared container port that is not bound to an
+          # endpoint port, so the operator's :8081 health port arrived as a
+          # second target - scraped over https because the job says https,
+          # answered in plain HTTP because health is not the metrics endpoint,
+          # and permanently down. The Service exposes 8443 alone; targets
+          # invented from container ports carry no endpoint port name.
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: https
+            action: keep
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
