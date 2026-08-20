@@ -51,6 +51,15 @@ obvious from where it sits here.
 - **Harbor's admin password and the `robot$henia+pipeline` credential** — held in
   Kubernetes Secrets and in root-only files on the host (`/root/harbor-admin.txt`,
   `/root/harbor-robot.txt`).
+- **The `robot$henia+henia-pull` credential** — a **pull-only** robot on the
+  `henia` project, held at `/root/harbor-pull.txt` and as the `harbor-pull`
+  Secret (`kubernetes.io/dockerconfigjson`, server `harbor-core.harbor.svc`) in
+  both `henia-system` and `default`. The operator's Deployment names it, and so
+  does the `tekton-build` ServiceAccount. Without it a restored cluster applies
+  cleanly and then fails at pull time with `ImagePullBackOff` and nothing to say
+  why — recreate it with a project-scoped robot holding `repository: pull` and
+  nothing else. Deliberately NOT the push robot: a push credential where pulls
+  happen would let any pull overwrite images.
 
 ## Caveat — this is a copy, not a deployment mechanism
 

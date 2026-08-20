@@ -70,6 +70,23 @@ spec:
   steps:
     - name: clone
       image: alpine/git:2.49.0
+      # The step that handles the git credential was the only one in either
+      # pipeline running as root, while devcontainer-verify.yaml argues
+      # explicitly that no step gets a weaker posture than the build step.
+      # Round 2, F10. HOME must move with it: the image leaves HOME unset, so
+      # the kubelet default is /root, which uid 1000 cannot write - and this
+      # step writes both $HOME/.git-credentials and $HOME/.gitconfig.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      env:
+        - name: HOME
+          value: /tmp
       script: |
         #!/bin/sh
         set -eu
@@ -195,7 +212,12 @@ spec:
         Identifier of the run, used to give each PipelineRun its own tree on
         the shared workspace. The Pipeline passes $(context.pipelineRun.name).
   workspaces:
+    # Read-only: this task inspects the tree, it does not build in it. The step
+    # runs a freshly built, unvetted image, and the workspace PVC persists
+    # across runs - without this it could modify another run's source. Review
+    # round 2, finding F4.
     - name: source
+      readOnly: true
   steps:
     - name: start
       # The step's container IS the freshly built image, with the cloned
@@ -254,6 +276,9 @@ spec:
     - name: image
       description: The image reference actually built, tag included.
       value: $(tasks.build.results.image)
+    - name: commit
+      description: Short commit SHA of the revision actually cloned.
+      value: $(tasks.build.results.commit)
   tasks:
     - name: build
       taskRef:

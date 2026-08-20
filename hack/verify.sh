@@ -85,6 +85,42 @@ else
   fail "1.5" "kubectl, tea, kustomize, sops all resolve" "missing:$missing"
 fi
 
+# 1.1 and 1.2 were absent entirely until review round 2 (F7). The header above
+# claims the output maps one-to-one onto the checkboxes; it mapped 41 of 43.
+if command -v droast >/dev/null 2>&1; then
+  if droast_out="$(droast devcontainer/Dockerfile 2>&1)"; then
+    if grep -qE '[1-9][0-9]* error' <<<"$droast_out"; then
+      fail "1.1" "droast reports no errors on devcontainer/Dockerfile" \
+           "$(grep -m1 'Summary' <<<"$droast_out")"
+    else
+      pass "1.1" "droast reports no errors on devcontainer/Dockerfile"
+    fi
+  else
+    fail "1.1" "droast reports no errors on devcontainer/Dockerfile" "droast exited non-zero"
+  fi
+else
+  skip "1.1" "droast reports no errors on devcontainer/Dockerfile" "droast is not installed"
+fi
+
+# The pinned download URLs must still resolve. Network-dependent, so a failure
+# to reach them is a SKIP; only a definite 4xx/5xx is a FAIL.
+GO_URL="https://go.dev/dl/go1.26.7.linux-$(dpkg --print-architecture 2>/dev/null || echo amd64).tar.gz"
+KB_URL="https://github.com/kubernetes-sigs/kubebuilder/releases/download/v4.15.0/kubebuilder_linux_$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+url_bad=""
+url_unreachable=""
+for u in "$GO_URL" "$KB_URL"; do
+  c="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 20 -I "$u" 2>/dev/null)" || c=""
+  if [[ -z "$c" || "$c" == "000" ]]; then url_unreachable="$url_unreachable $u"
+  elif [[ "$c" != "200" ]]; then url_bad="$url_bad $u($c)"; fi
+done
+if [[ -n "$url_bad" ]]; then
+  fail "1.2" "the pinned Go 1.26 and kubebuilder v4.15.0 URLs resolve" "$url_bad"
+elif [[ -n "$url_unreachable" ]]; then
+  skip "1.2" "the pinned Go 1.26 and kubebuilder v4.15.0 URLs resolve" "no network reachability"
+else
+  pass "1.2" "the pinned Go 1.26 and kubebuilder v4.15.0 URLs resolve"
+fi
+
 skip "1.6" "clean-context image rebuild" \
      "needs a host with Docker: docker build --no-cache -t henia-devcontainer devcontainer/"
 
@@ -104,10 +140,22 @@ if [[ -z "$CG" ]]; then
 elif ! git diff --quiet -- api config 2>/dev/null; then
   skip "2.3" "regeneration produces no diff" "api/ or config/ already dirty; commit or stash first"
 else
+  # controller-gen's exit status is a result, not noise. Discarded, a binary
+  # that exists and is executable but fails at runtime - wrong architecture,
+  # missing loader, a renamed flag - regenerates nothing, leaves the tree
+  # unchanged, and this check reports PASS having verified nothing. Review
+  # round 2, finding F1; same class as the 2.7 rewrite below.
+  cg_err=""
   "$CG" rbac:roleName=manager-role crd webhook paths="./..." \
-        output:crd:artifacts:config=config/crd/bases >/dev/null 2>&1
-  "$CG" object:headerFile="hack/boilerplate.go.txt" paths="./..." >/dev/null 2>&1
-  if git diff --quiet -- api config; then
+        output:crd:artifacts:config=config/crd/bases >/dev/null 2>&1 \
+    || cg_err="crd/rbac generation failed (exit $?)"
+  if [[ -z "$cg_err" ]]; then
+    "$CG" object:headerFile="hack/boilerplate.go.txt" paths="./..." >/dev/null 2>&1 \
+      || cg_err="deepcopy generation failed (exit $?)"
+  fi
+  if [[ -n "$cg_err" ]]; then
+    fail "2.3" "regeneration produces no diff" "$CG: $cg_err"
+  elif git diff --quiet -- api config; then
     pass "2.3" "regeneration produces no diff"
   else
     fail "2.3" "regeneration produces no diff" \
@@ -123,7 +171,14 @@ else
 fi
 
 if grep -q 'categories:' "$CRD" && grep -q 'shortNames:' "$CRD"; then
-  if [[ "$have_cluster" == 1 ]] && $KUBECTL get henia -A >/dev/null 2>&1; then
+  # The per-criterion SKIP sweep of round 1 (F4) missed this one: its cluster
+  # dependency sits inside a check whose else-branch is `fail`, so a run
+  # without a cluster reported FAIL for something it simply could not reach.
+  # Round 2, F7.
+  if [[ "$have_cluster" != 1 ]]; then
+    skip "2.5" "CRD carries categories + shortName, 'kubectl get henia' resolves" \
+         "markers are present; the resolution half needs cluster access"
+  elif $KUBECTL get henia -A >/dev/null 2>&1; then
     pass "2.5" "CRD carries categories + shortName, 'kubectl get henia' resolves"
   else
     fail "2.5" "CRD carries categories + shortName, 'kubectl get henia' resolves" \
@@ -150,6 +205,12 @@ fi
 if ! scaffold="$(git show --name-only --format= 2604250 2>&1)"; then
   fail "2.7" "scaffold overwrote nothing the repo owns" \
        "commit 2604250 unreachable: ${scaffold%%$'\n'*}"
+elif [[ -z "${scaffold//[[:space:]]/}" ]]; then
+  # Exit 0 with no file list - a merge commit, an empty commit, a rewritten
+  # tree - means nothing was inspected. Not reachable for 2604250 today, but
+  # it is the same hole on the success path.
+  fail "2.7" "scaffold overwrote nothing the repo owns" \
+       "commit 2604250 listed no files; nothing was inspected"
 else
   strays="$(grep -E '^(context|infra|devcontainer|docs|content)/' <<<"$scaffold" \
             | grep -vE '^(context/changes/cluster-substrate/(plan|change)\.md|devcontainer/Dockerfile)$')"
@@ -175,11 +236,15 @@ else
   skip "3.1" "all Harbor pods Ready" "no cluster access"
 fi
 
-health="$(curl -fsS --max-time 15 "$HARBOR_URL/api/v2.0/health" 2>/dev/null)"
-if [[ -n "$health" ]] && ! grep -q '"status":"unhealthy"' <<<"$health"; then
-  pass "3.2" "Harbor reports every component healthy"
+# Unreachable is not unhealthy. Round 2, F7.
+if health="$(curl -fsS --max-time 15 "$HARBOR_URL/api/v2.0/health" 2>/dev/null)"; then
+  if grep -q '"status":"unhealthy"' <<<"$health"; then
+    fail "3.2" "Harbor reports every component healthy" "${health:0:120}"
+  else
+    pass "3.2" "Harbor reports every component healthy"
+  fi
 else
-  fail "3.2" "Harbor reports every component healthy" "${health:0:120}"
+  skip "3.2" "Harbor reports every component healthy" "$HARBOR_URL is unreachable"
 fi
 
 skip "3.3" "robot account authenticates"  "needs the robot credential (/root/harbor-robot.txt on tachiko)"
@@ -188,9 +253,11 @@ skip "3.5" "registries.yaml on the host"  "needs root on tachiko: diff against i
 
 # Regression guard for 81c527e: Harbor must answer 200 over HTTP, not redirect
 # to an HTTPS port that has no TLS and no firewall opening behind it.
-code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "$HARBOR_URL/" 2>/dev/null)"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$HARBOR_URL/" 2>/dev/null)" || code=""
 if [[ "$code" == "200" ]]; then
   pass "3.6" "Harbor UI answers 200 over HTTP, no ssl-redirect"
+elif [[ -z "$code" || "$code" == "000" ]]; then
+  skip "3.6" "Harbor UI answers 200 over HTTP, no ssl-redirect" "$HARBOR_URL is unreachable"
 else
   fail "3.6" "Harbor UI answers 200 over HTTP, no ssl-redirect" \
        "got HTTP $code — has the chart's ssl-redirect come back?"
@@ -265,9 +332,11 @@ def walk(n):
         return any(walk(v) for v in n.values())
     if isinstance(n, list): return any(walk(v) for v in n)
     return False
-docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
+# Every pipeline file, not just the first. devcontainer-verify.yaml gained a
+# third Task and was never scanned by this guard. Round 2, F7.
+docs = [d for f in sys.argv[1:] for d in yaml.safe_load_all(open(f)) if d]
 sys.exit(1 if any(walk(d) for d in docs) else 0)
-' deploy/tekton/henia-operator-build.yaml; then
+' deploy/tekton/*.yaml; then
   pass "5.3" "no privileged: true anywhere in the pipeline definition"
 else
   fail "5.3" "no privileged: true in the pipeline definition"
@@ -276,12 +345,16 @@ fi
 skip "5.4" "built image executes in a throwaway pod" "needs write access to the cluster"
 
 # No secret VALUES in the committed pipeline — only Secret names.
-if grep -rniE '^\s*(password|token|auth|\.dockerconfigjson):' deploy/tekton/ >/dev/null 2>&1; then
-  fail "5.5" "no secret values in the committed pipeline YAML" \
-       "$(grep -rniE '^\s*(password|token|auth|\.dockerconfigjson):' deploy/tekton/ | head -1)"
-else
-  pass "5.5" "no secret values in the committed pipeline YAML; credentials arrive as Secret volumes"
-fi
+# grep's exit codes are three-valued and the difference matters: 1 is "looked,
+# found nothing", 2 is "could not look". Collapsing them let an unreadable or
+# missing deploy/tekton/ report PASS having scanned nothing. Round 2, F1 sweep.
+secret_hits="$(grep -rniE '^\s*(password|token|auth|\.dockerconfigjson):' deploy/tekton/ 2>&1)"
+case $? in
+  0) fail "5.5" "no secret values in the committed pipeline YAML" "${secret_hits%%$'\n'*}" ;;
+  1) pass "5.5" "no secret values in the committed pipeline YAML; credentials arrive as Secret volumes" ;;
+  *) fail "5.5" "no secret values in the committed pipeline YAML" \
+          "could not scan deploy/tekton/: ${secret_hits%%$'\n'*}" ;;
+esac
 
 # ---------------------------------------------------------------- phase 6 ----
 section "Phase 6 — operator deployment"

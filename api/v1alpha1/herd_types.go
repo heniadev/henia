@@ -31,7 +31,7 @@ type RepositoryRef struct {
 	// +kubebuilder:validation:MinLength=1
 	URL string `json:"url"`
 
-	// revision is the branch, tag or commit to track. Naming it is
+	// revision is the branch or tag to track. Naming it is
 	// deliberately encouraged rather than defaulted: this project has already
 	// been bitten once by a clone with no ref, which took a default branch and
 	// produced a tree missing the very code it was meant to build. Empty means
@@ -41,7 +41,11 @@ type RepositoryRef struct {
 
 	// secretRef names a Secret in the Herd's own namespace holding the
 	// credential used to clone this repository. Omit it for a public one.
+	// An empty reference is rejected rather than silently accepted: without
+	// the rule below, `secretRef: {}` validates, because LocalObjectReference
+	// defaults name to the empty string and does not require it.
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="secretRef.name must not be empty"
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 

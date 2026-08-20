@@ -75,7 +75,7 @@ spec:
                   properties:
                     revision:
                       description: |-
-                        revision is the branch, tag or commit to track. Naming it is
+                        revision is the branch or tag to track. Naming it is
                         deliberately encouraged rather than defaulted: this project has already
                         been bitten once by a clone with no ref, which took a default branch and
                         produced a tree missing the very code it was meant to build. Empty means
@@ -85,6 +85,9 @@ spec:
                       description: |-
                         secretRef names a Secret in the Herd's own namespace holding the
                         credential used to clone this repository. Omit it for a public one.
+                        An empty reference is rejected rather than silently accepted: without
+                        the rule below, `secretRef: {}` validates, because LocalObjectReference
+                        defaults name to the empty string and does not require it.
                       properties:
                         name:
                           default: ""
@@ -97,6 +100,9 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
+                      x-kubernetes-validations:
+                      - message: secretRef.name must not be empty
+                        rule: has(self.name) && self.name != ''
                     url:
                       description: url is the clone URL of the repository.
                       minLength: 1

@@ -11,17 +11,28 @@
 # S-03 `checks-and-reconcile`, not this change.
 ---
 # The identity PipelineRuns run under. Tracked because it carries no secret
-# VALUES — only the names of two Secrets created out-of-band (see README.md):
-# `gitea-auth` for the clone and `harbor-push` for the push.
+# VALUES — only the names of Secrets created out-of-band (see README.md).
+#
+# imagePullSecrets is `harbor-pull`, NOT `harbor-push`. It was harbor-push
+# until review round 2 (F3), which was inert while every step image came from
+# a public registry - and stopped being inert the moment the devcontainer
+# pipeline gained a step whose image is pulled from Harbor. A push credential
+# sitting where pulls happen is exactly what the operator's own pull robot was
+# created to avoid; the principle was applied there and missed here.
+#
+# `secrets:` is deliberately absent. It listed gitea-auth, which did nothing:
+# Tekton's creds-init only consumes SA secrets annotated `tekton.dev/git-*`,
+# and the clone step mounts the Secret itself. Worse than useless - had that
+# annotation ever been added, creds-init would have written its own
+# $HOME/.git-credentials into every step, competing silently with the one the
+# clone step writes.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tekton-build
   namespace: default
-secrets:
-  - name: gitea-auth
 imagePullSecrets:
-  - name: harbor-push
+  - name: harbor-pull
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -72,6 +83,23 @@ spec:
   steps:
     - name: clone
       image: alpine/git:2.49.0
+      # The step that handles the git credential was the only one in either
+      # pipeline running as root, while devcontainer-verify.yaml argues
+      # explicitly that no step gets a weaker posture than the build step.
+      # Round 2, F10. HOME must move with it: the image leaves HOME unset, so
+      # the kubelet default is /root, which uid 1000 cannot write - and this
+      # step writes both $HOME/.git-credentials and $HOME/.gitconfig.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      env:
+        - name: HOME
+          value: /tmp
       script: |
         #!/bin/sh
         set -eu
@@ -181,6 +209,9 @@ spec:
     - name: image
       description: The image reference actually built, tag included.
       value: $(tasks.build.results.image)
+    - name: commit
+      description: Short commit SHA of the revision actually cloned.
+      value: $(tasks.build.results.commit)
   tasks:
     - name: build
       taskRef:

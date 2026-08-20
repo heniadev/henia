@@ -39,18 +39,16 @@ kubectl apply -f deploy/tekton/henia-operator-build.yaml
 
 Two parameters, both explicit:
 
-- **`revision`** — the git ref to build. It is deliberately **not defaulted**.
-  While a change is in flight the operator source lives on its feature branch;
-  a clone with no ref would take the repository's default branch and build a
-  tree containing no operator, failing as though the Dockerfile were broken.
-- **`image`** — the fully qualified reference *including the tag*. The tag is
-  the **short commit SHA** of the revision being built, so a running Deployment
-  names exactly one build rather than a floating tag that changes underneath it.
-
-The tag is **not** yours to supply. Pass the repository without one; the clone
-step derives the tag from the revision it actually cloned and publishes it as a
-Pipeline result. A short SHA computed from your own working copy can name a
-commit the pipeline never built.
+- **`revision`** — the **branch or tag** to build. `git clone --branch` does not
+  accept a bare commit SHA, so a ref is required, and it is deliberately **not
+  defaulted**: while a change is in flight the operator source lives on its
+  feature branch, and a clone with no ref would take the repository's default
+  branch and build a tree containing no operator, failing as though the
+  Dockerfile were broken.
+- **`image`** — the image repository, **without a tag**. The tag is not yours to
+  supply: the clone step derives it from the revision it actually cloned and
+  publishes it as a Pipeline result. A short SHA computed from your own working
+  copy can name a commit the pipeline never built.
 
 ```sh
 REV=feature/cluster-substrate                     # or main, once merged
@@ -66,6 +64,10 @@ spec:
     name: henia-operator
   taskRunTemplate:
     serviceAccountName: tekton-build
+    podTemplate:
+      # No step in either pipeline talks to the Kubernetes API. Round 2's F4
+      # found the token mounted into a step that runs a freshly built image.
+      automountServiceAccountToken: false
   timeouts:
     pipeline: 1h
   params:
@@ -131,6 +133,10 @@ spec:
     name: devcontainer-verify
   taskRunTemplate:
     serviceAccountName: tekton-build
+    podTemplate:
+      # No step in either pipeline talks to the Kubernetes API. Round 2's F4
+      # found the token mounted into a step that runs a freshly built image.
+      automountServiceAccountToken: false
   timeouts:
     pipeline: 1h
   params:

@@ -46,7 +46,7 @@ A residual on the success path: 2.7 now handles git's error exit, but still trea
 - *Confidence*: High — the discarded status is directly readable, and the failure mode was demonstrated in this very environment by a different binary.
 - *Blind spot*: I did not enumerate the other checks for the same pattern; 2.3 and 2.7 were the two examined closely, and a sweep might find more.
 
-**Decision**: PENDING
+**Decision**: FIXED — including the sweep, which found a third instance. 2.3 now captures controller-gen's exit status and FAILs on it; 2.7 FAILs when the commit lists no files; and 5.5 distinguishes grep's three exit codes — 1 is "looked, found nothing", 2 is "could not look", and collapsing them let an unreadable `deploy/tekton/` report PASS having scanned nothing. Both new failure paths were proved with a deliberate break, staged first so the break could not leak into a commit: a controller-gen stub exiting 3 produced `FAIL 2.3 … crd/rbac generation failed (exit 3)`, and a missing scan directory produced `FAIL 5.5 … could not scan`.
 
 ### F2 — The operator build pipeline has not run since it was rewritten
 
@@ -94,7 +94,7 @@ That was inert before, because every step image came from a public registry. It 
 - *Confidence*: High.
 - *Blind spot*: I did not check whether anything else in `default` relies on `tekton-build`'s pull secret.
 
-**Decision**: PENDING
+**Decision**: FIXED — `tekton-build`'s `imagePullSecrets` names `harbor-pull`, and the vestigial `secrets: [gitea-auth]` list is gone. The ServiceAccount's comment now records why both changed, including what would have happened had that Secret ever gained a `tekton.dev/git-*` annotation. Needs the `harbor-pull` Secret to exist in `default` as well as `henia-system`.
 
 ### F4 — The verify step runs an unvetted image with a writable workspace and a mounted token
 
@@ -111,7 +111,7 @@ That was inert before, because every step image came from a public registry. It 
 - *Confidence*: High on the token; moderate on the mount, which I have not exercised.
 - *Blind spot*: I did not verify a read-only workspace still satisfies the `test -d .git` assertion — it should, but the pipeline took three runs to go green, so "should" has a poor record here.
 
-**Decision**: PENDING
+**Decision**: FIXED — the `devcontainer-start` Task declares its workspace `readOnly: true`, and both PipelineRun recipes in the README set `podTemplate.automountServiceAccountToken: false`. No step in either pipeline talks to the Kubernetes API. The read-only mount is not yet exercised — that is part of the pipeline run queued under F2.
 
 ### F5 — Nothing durable records how to create `harbor-pull`
 
@@ -132,7 +132,7 @@ This is the same shape as round 1's F2 and F5: cluster state whose recreation is
 - *Confidence*: High.
 - *Blind spot*: None material.
 
-**Decision**: PENDING
+**Decision**: FIXED — `infra/tachiko/README.md` now lists `robot$henia+henia-pull` beside the other out-of-band credentials, naming its scope, both namespaces that hold the Secret, both consumers, the failure mode when it is absent, and why it is deliberately not the push robot.
 
 ### F6 — The build README contradicts itself about the image parameter
 
@@ -145,7 +145,7 @@ This is the same shape as round 1's F2 and F5: cluster state whose recreation is
 
 **Fix**: delete the stale bullet.
 
-**Decision**: PENDING
+**Decision**: FIXED — the superseded bullet is deleted. The paragraph below it and the Task's own param description already state it correctly, and the README's example passes an untagged repository.
 
 ### F7 — `verify.sh` covers 41 of 43 criteria, and mis-reports three more when it cannot reach a dependency
 
@@ -161,7 +161,7 @@ This is the same shape as round 1's F2 and F5: cluster state whose recreation is
 - **3.2 and 3.6 do the same** when Harbor is unreachable. Reproduced.
 - **5.3's privileged-pod guard parses only `henia-operator-build.yaml`**, so the second pipeline — which gained a third Task in these commits — is not covered. 5.5's secret grep does scan the directory wholesale.
 
-**Decision**: PENDING
+**Decision**: FIXED — all four. 1.1 runs `droast` and fails on a non-zero error count; 1.2 HEADs both pinned URLs, failing on a definite 4xx/5xx and skipping when the network is unreachable. Coverage is now **43 of 43** — the header's one-to-one claim is true. 2.5 skips rather than fails when there is no cluster, and 3.2/3.6 skip rather than fail when Harbor is unreachable: verified with `KUBECTL=/bin/false HARBOR_URL=http://127.0.0.1:9`, which now produces no FAILs at all. 5.3's privileged-pod guard parses every file in `deploy/tekton/` rather than only the first. The suite reports 31 passed, 0 failed, 14 skipped.
 
 ### F8 — The running operator predates the API it is supposed to serve
 
@@ -190,7 +190,7 @@ Resolved by F2's Fix A — a rebuild and redeploy closes both — provided the b
 - `git clone --branch` accepts a branch or tag only; a full commit SHA fails with "Remote branch … not found". Both `herd_types.go`'s comment ("branch, tag or commit") and the README ("the git ref to build") imply commits work.
 - Both Tasks declare a `commit` result that no Pipeline surfaces and no step consumes — declared-but-dead output in both files.
 
-**Decision**: PENDING
+**Decision**: FIXED — a CEL rule rejects `secretRef: {}` (`x-kubernetes-validations` confirmed present in the generated CRD); the type comment and the README both say "branch or tag" now, with the README explaining that `git clone --branch` will not take a bare SHA; and both Pipelines surface the `commit` result, so it is no longer declared-but-dead.
 
 ### F10 — The one container holding the git credential is the only one running as root
 
@@ -203,7 +203,7 @@ Resolved by F2's Fix A — a rebuild and redeploy closes both — provided the b
 
 The credential handling itself was verified sound this round: `HOME=/root` exists and is writable in `alpine/git:2.49.0`, the `umask 077` subshell does apply to the redirection, the file lands in the container's own writable layer and never reaches the shared PVC, and nothing copies `$HOME`. Tekton v1.15.0 does not rewrite HOME. All three claims in the step's comment are true as written.
 
-**Decision**: PENDING
+**Decision**: FIXED — both clone steps carry uid/gid 1000, `ALL` capabilities dropped and `RuntimeDefault` seccomp, matching the build step. `HOME` moves to `/tmp` with them: `alpine/git` leaves HOME unset, so the kubelet default is `/root`, which uid 1000 cannot write — and this step writes both `.git-credentials` and `.gitconfig`. **Unverified**: whether uid 1000 can write the `local-path` workspace PVC. That is exactly the kind of assumption that failed twice in round 1's F3, and it is proved or disproved by the pipeline run queued under F2.
 
 ## Automated Verification (re-run during review)
 
