@@ -2,11 +2,11 @@
 # Implementation Review: Cluster Substrate — Operator, Build Path and Registry
 
 - **Plan**: `context/changes/cluster-substrate/plan.md`
-- **Scope**: whole plan — all 8 phases, 43 of 43 Progress items checked. Second round; round 1 is preserved at `git show dfc64fc:context/changes/cluster-substrate/reviews/impl-review.md`
+- **Scope**: whole plan — all 8 phases, 43 of 43 Progress items checked. Third round; round 1 at `git show dfc64fc:…/reviews/impl-review.md`, round 2 at `git show d0b57ac:…/reviews/impl-review.md`
 - **Date**: 2026-08-20
-- **Diff basis**: Progress SHAs. All 25 commits in `main..HEAD` carry the change's `<type>(cluster-substrate):` subject convention and the merge-base range coincides exactly with the change. This round concentrates on `dfc64fc..HEAD` — the three fix commits `9a46f1a`, `b181ab0`, `5893187` — because fixes are where new defects live.
-- **Verdict**: NEEDS ATTENTION — triaged 2026-08-20: all 10 findings fixed, and every fix that touches the cluster verified on it
-- **Findings**: 0 critical, 6 warnings, 4 observations
+- **Diff basis**: Progress SHAs. All 28 commits in `main..HEAD` carry the change's `<type>(cluster-substrate):` subject convention and the merge-base range coincides exactly with the change. This round concentrates on `d0b57ac..HEAD` — `7c1d139`, `14ba22b`, `d4f7409` — plus an exhaustive audit of `hack/verify.sh`, which produced a false-PASS finding in two of the three rounds.
+- **Verdict**: REWORK REQUIRED
+- **Findings**: 1 critical, 5 warnings, 4 observations
 
 ## Verdicts
 
@@ -15,223 +15,242 @@
 | Plan Adherence | WARNING |
 | Scope Discipline | PASS |
 | Safety & Quality | WARNING |
-| Architecture | WARNING |
+| Architecture | PASS |
 | Pattern Consistency | WARNING |
-| Success Criteria | WARNING |
+| Success Criteria | FAIL |
 
-**Round 1's nine findings are closed and verified independently.** `HerdSpec` carries `repositories` with the generated CRD matching the Go types; the Deployment names a pull secret; the metrics-reader binding is tracked and its `roleRef` matches what `config/rbac` actually renders under the `henia-` prefix; the tag is derived from the cloned tree and the whole chain connects; the devcontainer pipeline is wired correctly and has run green. No exclusion is violated, and the plan amendment accurately describes the tree.
+Round 2's ten findings are closed and verified, most of them on the cluster rather than on the page: the CEL guard rejects `secretRef: {}` on the live CRD, the read-only workspace and the non-root clone step both ran green, `tekton-build` pulls with the pull robot, and the operator runs an image its own pipeline derived a tag for. Every one of the plan's 23 Changes Required items has an artifact; no exclusion is violated.
 
-What remains is a tier down from round 1: no criticals, nothing broken in the cluster. Six warnings, of which the sharpest three are consequences of the fixes themselves — a verification check that can still pass without verifying, a delivery pipeline rewritten and never run, and a push-scoped credential doing a pull job in the one place the fix commit did not look.
+The verdict is driven by a single finding, and it is not a regression — it has been latent since phase 2. **A success criterion that has been checked since `2604250` is false**, and the harness written to catch exactly this class passes it by running a different command than the plan names. That is a Success Criteria FAIL, and one FAIL is REWORK REQUIRED regardless of the rest.
 
 ## Findings
 
-### F1 — Check 2.3 can report PASS without regenerating anything
+### F1 — Criterion 2.3 is false: `make manifests generate` dirties the tree
 
-- **Severity**: ⚠️ WARNING
+- **Severity**: 🔴 CRITICAL
 - **Impact**: 🧠 HIGH
 - **Dimension**: Success Criteria
-- **Location**: `hack/verify.sh:106-115`
+- **Location**: `hack/verify.sh:153`, `Makefile:52`, `api/v1alpha1/zz_generated.deepcopy.go:4`
 
-**Detail**: Check 2.3 runs `controller-gen` twice with `>/dev/null 2>&1`, discarding both the output *and* the exit status, then asserts `git diff --quiet -- api config`. If the chosen binary exists and is `-x` but fails at runtime — wrong architecture, missing loader, OOM, a changed flag — nothing is regenerated, the tree is unchanged, and the check reports PASS having verified nothing.
+**Detail**: Phase 2's criterion reads *"`make manifests generate` produces no diff on a second run."* Running it produces a diff.
 
-This is the exact class the 2.7 rewrite closed one check above it, left untouched. The script's own header promises that a check which cannot run says SKIP.
+`Makefile:52` invokes `object:headerFile="hack/boilerplate.go.txt",year=$(YEAR)`. `hack/boilerplate.go.txt` carries the literal `YEAR` placeholder, and the committed `zz_generated.deepcopy.go` reads `Copyright .` — the year-less output. Running the Makefile's own invocation rewrites the header to `Copyright 2026.`:
 
-Correcting the round-2 agent that raised it: it claimed a live reproduction via `bin/controller-gen` exiting 126, but `[[ -x bin/controller-gen ]]` is **false** in this repo (the symlink is unreadable), so the selector falls through to `bin/controller-gen-v0.21.0`, which works. **The PASS 2.3 results in this session were genuine**, and regeneration was separately confirmed by running controller-gen directly. The defect is latent, not firing.
+```
+  committed:            Copyright .
+  after make generate:  Copyright 2026.
+  git status:           M api/v1alpha1/zz_generated.deepcopy.go
+```
 
-A residual on the success path: 2.7 now handles git's error exit, but still treats empty output as clean. A `git show` that exits 0 with no file list would pass having inspected nothing. Not reachable today — `2604250` is single-parent and lists 51 files.
+Criterion 2.3 is green only because `hack/verify.sh:153` regenerates *differently from the project* — it omits `year=`. `manifests` matches; `generate` does not.
 
-**Fix ⭐** — check controller-gen's exit status and FAIL on it; assert 2.7's file list is non-empty.
-- *Strength*: Two lines each, in the same shape as the 2.7 fix that is already proven.
-- *Tradeoff*: None; the check gets stricter in the direction the script already claims.
-- *Confidence*: High — the discarded status is directly readable, and the failure mode was demonstrated in this very environment by a different binary.
-- *Blind spot*: I did not enumerate the other checks for the same pattern; 2.3 and 2.7 were the two examined closely, and a sweep might find more.
+The origin is recorded in `2604250`'s own commit message: `make` was missing from the image at scaffold time, so "kubebuilder's post-scaffold step failed and criterion 2.3 could not run as written", and idempotency was "verified by invoking the same controller-gen v0.21.0 the Makefile pins, directly". That workaround baked a year-less header into the tree, and every check since has repeated the workaround rather than the criterion — including `hack/verify.sh`, written two rounds ago specifically to stop criteria being answered by something other than what they say.
 
-**Decision**: FIXED — including the sweep, which found a third instance. 2.3 now captures controller-gen's exit status and FAILs on it; 2.7 FAILs when the commit lists no files; and 5.5 distinguishes grep's three exit codes — 1 is "looked, found nothing", 2 is "could not look", and collapsing them let an unreadable `deploy/tekton/` report PASS having scanned nothing. Both new failure paths were proved with a deliberate break, staged first so the break could not leak into a commit: a controller-gen stub exiting 3 produced `FAIL 2.3 … crd/rbac generation failed (exit 3)`, and a missing scan directory produced `FAIL 5.5 … could not scan`.
+Nothing is broken at runtime: the header is a comment. What is broken is the criterion, and the check that was supposed to defend it.
 
-### F2 — The operator build pipeline has not run since it was rewritten
+**Fix A ⭐ Recommended** — regenerate with the Makefile's invocation, commit the result, and change `hack/verify.sh` to shell out to `make manifests generate` rather than reimplementing it.
+- *Strength*: Makes the criterion true and makes the check test the thing the criterion names. A check that reimplements the command it verifies can always drift from it — that is the general defect, and this is the general fix.
+- *Tradeoff*: `make` must be on PATH for 2.3 to run; where it is not, the check SKIPs instead of testing a近 approximation. It is in the image (`devcontainer/Dockerfile:22`, added by `2604250` for exactly this reason).
+- *Confidence*: High. The divergence is two literal strings, and the diff was reproduced and restored.
+- *Blind spot*: `YEAR` defaults to `$(shell date +%Y)`, so the committed header will read `2026` and a regeneration in 2027 will dirty the tree again — the criterion becomes time-dependent. Pinning `YEAR` in the Makefile would remove that, but changes a scaffold default the plan did not discuss.
 
-- **Severity**: ⚠️ WARNING
-- **Impact**: 🧠 HIGH
-- **Dimension**: Success Criteria
-- **Location**: `deploy/tekton/henia-operator-build.yaml`
-
-**Detail**: `b181ab0` and `9a46f1a` changed this pipeline in three substantive ways — the credential mechanism (`GIT_ASKPASS`, then git's `store` helper), a per-run workspace path, and a tag derived from Tekton results. The last `henia-operator` PipelineRun was `henia-build-2` on **2026-08-19**, a day before those changes.
-
-Criterion 5.1 nonetheless reports PASS: `hack/verify.sh` counts *any* succeeded PipelineRun, and `devcontainer-verify-3` satisfies it. So the criterion that would have caught this is answered by a different pipeline.
-
-This is the same defect class as round 1's F3 — code committed and never exercised — relocated to the sibling file. Round 1 made exactly this argument, and F3's own history is the evidence for it: running that pipeline cost three attempts and surfaced two real defects invisible to inspection. The two files share the rewritten clone step almost verbatim, which is reassuring but not the same as having run it.
-
-**Fix A ⭐ Recommended** — run a `PipelineRun` of `henia-operator`, then redeploy from the tag it produces.
-- *Strength*: Exercises the rewritten code on the path that actually delivers the operator, and closes F8 in the same motion — the redeploy replaces an image built before the API change.
-- *Tradeoff*: A full operator build and a rollout on a single-node box.
-- *Confidence*: High that it is the right move. Moderate that it will pass first time — the sibling took three attempts, and the shared code is the part that failed.
-- *Blind spot*: The pipeline clones from Gitea, and this branch is unpushed, so a run today builds `origin`'s tip rather than HEAD. Unlike the devcontainer image, the operator's source **has** changed since — so this run would rebuild the *old* API types unless the branch is pushed first.
-
-**Fix B** — tighten criterion 5.1 to name the pipeline, and defer the run.
-- *Strength*: Stops one pipeline's success standing in for another's, which is the reporting defect underneath.
-- *Tradeoff*: Leaves the rewritten pipeline unexercised — the thing round 1 argued hardest against.
-- *Confidence*: High.
+**Fix B** — leave the tree, and change `hack/verify.sh` to assert what the project actually does.
+- *Strength*: No generated churn; acknowledges that the year-less header is what the repo has always carried.
+- *Tradeoff*: The criterion stays false while reporting green, which is the situation this finding is about.
+- *Confidence*: High that it is safe; low that it is honest.
 - *Blind spot*: None material.
 
-**Decision**: FIXED — Fix A, in full. The branch was pushed to `origin` (`81c527e..7c1d139`), and `PipelineRun henia-build-3` ran the pipeline **as rewritten** and Succeeded, deriving its own tag: `image=harbor-core.harbor.svc/henia/henia-operator:7c1d139`, `commit=7c1d139`. That exercised the credential rewrite, the per-run workspace path, the results chain and the non-root clone step on the path that actually delivers the operator. `devcontainer-verify-4` had already exercised the same shapes beforehand — including the F10 assumption I could not verify by reading, that uid 1000 can write the `local-path` PVC.
+**Decision**: PENDING
 
-### F3 — A push-scoped credential does the pulling
+### F2 — Round 2's 3.2 fix reopened an empty-input false PASS, and split a sibling pair
+
+- **Severity**: ⚠️ WARNING
+- **Impact**: 🔎 MEDIUM
+- **Dimension**: Success Criteria
+- **Location**: `hack/verify.sh:240-248`
+
+**Detail**: Before `7c1d139`, 3.2 read `[[ -n "$health" ]] && ! grep -q unhealthy`. The round-2 rewrite — mine, to make an unreachable Harbor SKIP rather than FAIL — dropped the non-empty guard. A 200 with an empty body (an ingress answering for a dead Harbor) now exits 0, leaves `health` empty, `grep -q` finds nothing in nothing, and 3.2 PASSes having inspected nothing.
+
+The same rewrite also left 3.2 on `curl -fsS` while its sibling 3.6 deliberately dropped `-f` two checks later. With `-f`, any non-2xx collapses into the SKIP branch, so a 5xx from Harbor or a moved API path reports "unreachable" forever. Two checks against the same host, changed in the same commit, now disagree about what an HTTP error means.
+
+**Fix ⭐** — restore the non-empty guard and drop `-f` from 3.2, matching 3.6: unreachable SKIPs, a definite HTTP error FAILs, an empty body FAILs.
+- *Strength*: Restores what the fix removed and makes the pair consistent.
+- *Tradeoff*: None.
+- *Confidence*: High — both behaviours were reproduced.
+- *Blind spot*: I did not check whether Harbor's health endpoint can legitimately return 2xx with an empty body under any condition.
+
+**Decision**: PENDING
+
+### F3 — Phase 7 never got the "unreachable is not failed" treatment
+
+- **Severity**: ⚠️ WARNING
+- **Impact**: 🔎 MEDIUM
+- **Dimension**: Success Criteria
+- **Location**: `hack/verify.sh:404-450`
+
+**Detail**: With `PROM_AUTH` set and Prometheus down or the credential wrong, `prom` fails, `targets` is empty, the parser throws, and all four phase-7 checks report FAIL. Reproduced with `PROM_AUTH='x:y' PROM_URL='http://127.0.0.1:9'` → `FAIL 7.1 7.2 7.3 7.4`.
+
+This is the third consecutive round in which this class appears. Round 1's F4 found criteria vanishing silently; round 2's F7 found 2.5/3.2/3.6 reporting FAIL for an unreachable dependency and fixed those three; phase 7 was not touched, and the round-2 commit states the principle in its own message — "unreachable is not unhealthy" — while leaving four checks that violate it.
+
+It errs toward alarm, never toward false green. But a suite that cries wolf when the VPN is down is a suite people stop reading.
+
+**Fix ⭐** — distinguish a parse/transport failure from a real answer, as 7.4's counting already does downstream: SKIP when `targets` is empty or unparseable, FAIL only on a parsed response that disagrees.
+- *Strength*: Completes the sweep begun in round 2 and matches the commit's own stated rule.
+- *Tradeoff*: A malformed-but-non-empty response would still SKIP rather than FAIL.
+- *Confidence*: High.
+- *Blind spot*: The distinction rests on `json.loads` throwing; a valid JSON error document from a proxy would parse and yield zero targets, which reads as FAIL.
+
+**Decision**: PENDING
+
+### F4 — The pipelines' own prerequisites omit the credential they now require
 
 - **Severity**: ⚠️ WARNING
 - **Impact**: 🔎 MEDIUM
 - **Dimension**: Pattern Consistency
-- **Location**: `deploy/tekton/henia-operator-build.yaml:21-24`
+- **Location**: `deploy/tekton/README.md:13-18`
 
-**Detail**: `b181ab0` created a pull-scoped Harbor robot for the operator, arguing that a push credential where pulls happen "would let every node-level pull overwrite images, which is the opposite of what F2 is about". The `tekton-build` ServiceAccount, in the same commit, still carries `imagePullSecrets: [harbor-push]`.
+**Detail**: The prerequisites section says "**Both** Secrets live in `default`" and tables `gitea-auth` and `harbor-push`. Since round 2's F3, `tekton-build` names `harbor-pull` as its `imagePullSecrets`, and `devcontainer-start`'s step image is pulled from Harbor with it. `harbor-pull` is documented only in `infra/tachiko/README.md`.
 
-That was inert before, because every step image came from a public registry. It is load-bearing now: the F3 split gave `devcontainer-start` a step image pulled from Harbor, so the push robot is what fetches it. The reasoning was applied in one file and not in its sibling.
+Someone standing the pipelines up on a fresh cluster from this README gets `ImagePullBackOff` on the `start` task. That is precisely the failure mode round 2's F5 was raised about — fixed in the host README, reproduced one file over, in the document whose entire job is to list what must exist first.
 
-`secrets: [gitea-auth]` on the same ServiceAccount is separately vestigial — Tekton's creds-init only consumes SA secrets annotated `tekton.dev/git-*`, and the clone step mounts the Secret itself. Harmless today, but if that annotation were ever added, creds-init would write its own `$HOME/.git-credentials` into every step, silently competing with the hand-written one.
-
-**Fix ⭐** — point `tekton-build`'s `imagePullSecrets` at the pull robot, and drop the inert `secrets:` list.
-- *Strength*: Applies the fix commit's own stated principle where it actually bites.
-- *Tradeoff*: One more place the pull credential must exist — it is currently only in `henia-system`.
+**Fix ⭐** — add `harbor-pull` to the table and correct "Both" to "Three".
+- *Strength*: One table; the credential's details already exist in `infra/tachiko/README.md` to copy from.
+- *Tradeoff*: A third place naming the same Secret.
 - *Confidence*: High.
-- *Blind spot*: I did not check whether anything else in `default` relies on `tekton-build`'s pull secret.
+- *Blind spot*: None material.
 
-**Decision**: FIXED — `tekton-build`'s `imagePullSecrets` names `harbor-pull`, and the vestigial `secrets: [gitea-auth]` list is gone. The ServiceAccount's comment now records why both changed, including what would have happened had that Secret ever gained a `tekton.dev/git-*` annotation. Needs the `harbor-pull` Secret to exist in `default` as well as `henia-system`.
+**Decision**: PENDING
 
-### F4 — The verify step runs an unvetted image with a writable workspace and a mounted token
+### F5 — The non-root clone step cannot prune the trees earlier runs left, and says nothing
 
 - **Severity**: ⚠️ WARNING
 - **Impact**: 🔎 MEDIUM
 - **Dimension**: Safety & Quality
-- **Location**: `deploy/tekton/devcontainer-verify.yaml:200-215`
+- **Location**: `deploy/tekton/henia-operator-build.yaml:137-138`, `deploy/tekton/devcontainer-verify.yaml:124-125`
 
-**Detail**: The `start` step runs a freshly built image the file itself calls unvetted. Round 1's F3 fix gave it uid/gid 1000 and dropped all capabilities, which is right as far as it goes. Two things it does not cover: the shared workspace is mounted **read-write**, so that image can read and modify every other run's tree on a PVC that persists across runs; and the `tekton-build` ServiceAccount token is automounted — `automountServiceAccountToken` appears nowhere in `config/` or `deploy/`.
+**Detail**: Round 2's F10 fix moved the clone step to uid 1000. The workspace PVCs still hold trees from `henia-build-1` and `henia-build-2`, which ran as uid 0 and left root-owned `0755` directories. `rm -rf` must write into a directory to unlink its contents; uid 1000 cannot, so those trees survive — and the prune ends in `2>/dev/null || true`, so nothing is reported.
 
-**Fix ⭐** — set `automountServiceAccountToken: false` on the verify PipelineRun's pod template, and mount the workspace read-only for the `start` task.
-- *Strength*: Closes both without weakening the check, which only reads the tree.
-- *Tradeoff*: A read-only workspace mount needs the Task to declare it, and Tekton's per-task workspace `readOnly` applies to the whole task.
-- *Confidence*: High on the token; moderate on the mount, which I have not exercised.
-- *Blind spot*: I did not verify a read-only workspace still satisfies the `test -d .git` assertion — it should, but the pipeline took three runs to go green, so "should" has a poor record here.
+Latent: the trees are about a day old and the prune only touches `-mtime +3`. The consequence is silent unbounded growth of a 10Gi and a 20Gi PVC on a single-node box whose risk register rates contention top, while `deploy/tekton/README.md` tells the reader trees are pruned after three days.
 
-**Decision**: FIXED — the `devcontainer-start` Task declares its workspace `readOnly: true`, and both PipelineRun recipes in the README set `podTemplate.automountServiceAccountToken: false`. No step in either pipeline talks to the Kubernetes API. The read-only mount is not yet exercised — that is part of the pipeline run queued under F2.
+`rm -rf "$DEST"` is safe by contrast: `runId` is unique per run, and a collision would fail loudly under `set -eu`.
 
-### F5 — Nothing durable records how to create `harbor-pull`
+**Fix A ⭐ Recommended** — delete the pre-existing root-owned trees by hand once, and make the prune report what it could not remove instead of swallowing it.
+- *Strength*: Fixes the actual backlog and stops the next instance being silent. The mixed-ownership situation is a one-off caused by the uid change.
+- *Tradeoff*: A manual step on the host, and the prune gets noisier.
+- *Confidence*: High on the mechanism, which was demonstrated; the trees themselves I have not deleted.
+- *Blind spot*: Whether `local-path`'s directory really is 0777 at the root for both PVCs — the finding assumes the run directories, not the mount point, are the obstacle.
 
-- **Severity**: ⚠️ WARNING
-- **Impact**: 🔎 MEDIUM
-- **Dimension**: Architecture
-- **Location**: `config/manager/manager.yaml:101-108`
+**Fix B** — set `fsGroup` on the PipelineRun pod template so every run's tree is group-writable.
+- *Strength*: Structural; future ownership changes stop mattering.
+- *Tradeoff*: Does not help the already-root-owned trees, and changes the pod template for both pipelines.
+- *Confidence*: Moderate — I have not tested `fsGroup` against `local-path` here.
+- *Blind spot*: Interaction with the read-only workspace on `devcontainer-start`.
 
-**Detail**: The Deployment now depends on a Secret created out-of-band. On a fresh cluster or a restore from git, `kubectl apply` succeeds and the failure surfaces only at pull time as `ImagePullBackOff`, with kubelet's message naming the missing Secret but nothing explaining what belongs in it.
+**Decision**: PENDING
 
-The manifest comment records the *consequence*, and `registries.yaml` names the Secret — but no operational document says how to create one. `deploy/tekton/README.md` lists only `gitea-auth` and `harbor-push`; `infra/tachiko/README.md` names the admin password and the **push** robot. The only record that a pull-scoped robot backs it is `follow-ups/review-fixes.md`, which is change-scoped and will be archived with the change.
-
-This is the same shape as round 1's F2 and F5: cluster state whose recreation is not written down anywhere that outlives the change.
-
-**Fix ⭐** — add `harbor-pull` to `infra/tachiko/README.md`'s credential list, naming the robot and its scope.
-- *Strength*: Puts it where the other three out-of-band credentials already are, which is where someone rebuilding the box will look.
-- *Tradeoff*: None.
-- *Confidence*: High.
-- *Blind spot*: None material.
-
-**Decision**: FIXED — `infra/tachiko/README.md` now lists `robot$henia+henia-pull` beside the other out-of-band credentials, naming its scope, both namespaces that hold the Secret, both consumers, the failure mode when it is absent, and why it is deliberately not the push robot.
-
-### F6 — The build README contradicts itself about the image parameter
+### F6 — Three plan sentences were superseded by better implementations and never amended
 
 - **Severity**: ⚠️ WARNING
 - **Impact**: 🏃 LOW
-- **Dimension**: Pattern Consistency
-- **Location**: `deploy/tekton/README.md:46-48` vs `:50-53`
+- **Dimension**: Plan Adherence
+- **Location**: `context/changes/cluster-substrate/plan.md` — phases 5 and 7
 
-**Detail**: The F9 rewrite added its paragraph without removing the one it replaced. "**`image`** — the fully qualified reference *including the tag*" is immediately followed by "The tag is **not** yours to supply. Pass the repository without one." The Task's param description and the README's own example follow the second; a reader who obeys the first gets `repo:sha:sha`.
+**Detail**: Round 2's F8 established that when the implementation knowingly departs from the plan's wording, the plan gets an amendment note rather than the implementation getting bent. Three sentences still lack one:
 
-**Fix**: delete the stale bullet.
+- **P5.2** — "both as Secrets created out-of-band, **referenced by ServiceAccount**". They are Task-level Secret volumes; round 2's F3 fix removed the ServiceAccount's `secrets:` list on correct Tekton grounds, moving further from the wording.
+- **P5.3** — "a documented `PipelineRun` invocation **with the image tag as a parameter**". Round 1's F9 made the tag derived rather than passed, deliberately.
+- **P7.2** — "the metrics Service carries `prometheus.io/scrape` annotations". A static scrape job is used instead, which phase 7's own escape clause authorises — but the contract sentence still says annotations, and no note records the choice.
 
-**Decision**: FIXED — the superseded bullet is deleted. The paragraph below it and the Task's own param description already state it correctly, and the README's example passes an untagged repository.
+Each is a better implementation than the sentence it contradicts. The defect is the silence, not the choice.
 
-### F7 — `verify.sh` covers 41 of 43 criteria, and mis-reports three more when it cannot reach a dependency
+**Fix ⭐** — add amendment notes in the same shape as the auto-deploy one.
+
+**Decision**: PENDING
+
+### F7 — The telemetry path has not been re-verified since the operator was redeployed
 
 - **Severity**: 📝 OBSERVATION
 - **Impact**: 🔎 MEDIUM
 - **Dimension**: Success Criteria
-- **Location**: `hack/verify.sh:125-131`, `:178-197`, `:283-295`
+- **Location**: `hack/verify.sh:404-450`
 
-**Detail**: Four reporting gaps, none of which produces a false green, all of which weaken a script whose header claims its output "maps one-to-one onto the checkboxes":
+**Detail**: `14ba22b` rolled the operator to a new pod with a new IP. Prometheus's `endpoints` role should rediscover it, and criteria 7.1–7.3 were last confirmed before the redeploy. Nothing has checked since.
 
-- **1.1 and 1.2 appear nowhere.** The `droast` lint and the pinned-URL resolution are absent entirely — 41 of 43. `droast` is installed here and runs clean; it was invoked by hand in both reviews.
-- **2.5 FAILs instead of SKIPping without a cluster.** Round 1's F4 sweep gave phases 4, 6, 8 and the drift guards per-criterion SKIPs; phase 2 was missed, because 2.5's cluster dependency sits inside a check whose else-branch is `fail`. Reproduced: `KUBECTL=/bin/false ./hack/verify.sh` → `Failed: 2.5`.
-- **3.2 and 3.6 do the same** when Harbor is unreachable. Reproduced.
-- **5.3's privileged-pod guard parses only `henia-operator-build.yaml`**, so the second pipeline — which gained a third Task in these commits — is not covered. 5.5's secret grep does scan the directory wholesale.
+The harness cannot close the gap: 7.1–7.4 SKIP without `PROM_AUTH`, and the credential lives in a root-only file on tachiko. So FR-270 — one of F-01's three outcome clauses — currently rests on an inference about how Kubernetes service discovery behaves rather than on an observation, and `make verify` reports SKIP rather than telling anyone.
 
-**Decision**: FIXED — all four. 1.1 runs `droast` and fails on a non-zero error count; 1.2 HEADs both pinned URLs, failing on a definite 4xx/5xx and skipping when the network is unreachable. Coverage is now **43 of 43** — the header's one-to-one claim is true. 2.5 skips rather than fails when there is no cluster, and 3.2/3.6 skip rather than fail when Harbor is unreachable: verified with `KUBECTL=/bin/false HARBOR_URL=http://127.0.0.1:9`, which now produces no FAILs at all. 5.3's privileged-pod guard parses every file in `deploy/tekton/` rather than only the first. The suite reports 31 passed, 0 failed, 14 skipped.
+F3's fix would make this louder but not closable. Reaching Prometheus at its ClusterIP from the host closes it without the credential, as was done after `da23a3f`.
 
-### F8 — The running operator predates the API it is supposed to serve
+**Decision**: PENDING
 
-- **Severity**: 📝 OBSERVATION
-- **Impact**: 🔎 MEDIUM
-- **Dimension**: Architecture
-- **Location**: `config/manager/kustomization.yaml:6-8`
-
-**Detail**: The cluster runs `henia-operator:77c7c39`, built from a tree where `HerdSpec` was still the placeholder `Foo *string`. The CRD is served by the API server, so the schema is correct regardless, and the reconciler is a deliberate no-op that reads no spec field — it reconciled `herd-sample` under the new schema during this review, verified in its log. Nothing is broken.
-
-But HEAD's API types are not the ones in the running binary, and drift guard D1 cannot see it: D1 asserts that `config/` renders the image the cluster runs, which it does. A reader would reasonably assume the running operator embeds the current types.
-
-Resolved by F2's Fix A — a rebuild and redeploy closes both — provided the branch is pushed first, since the pipeline clones from Gitea and the operator's source *has* changed since `origin`'s tip.
-
-**Decision**: FIXED — resolved by F2's run, as anticipated. `config/manager/kustomization.yaml` names `7c1d139` and the cluster runs it, so the running binary embeds the current API types rather than a build that predates them. Rollout clean, `imagePullSecrets: harbor-pull` on the live spec, the controller has logged a reconcile since. Verified on the live CRD: `secretRef: {}` is rejected with "secretRef.name must not be empty", a named reference is accepted, and a Herd with no `repositories` is rejected.
-
-### F9 — Three small correctness gaps in the new API and pipelines
+### F8 — Five residual `verify.sh` weaknesses, none a false green
 
 - **Severity**: 📝 OBSERVATION
 - **Impact**: 🏃 LOW
-- **Dimension**: Plan Adherence
-- **Location**: `config/crd/bases/henia.dev_herds.yaml:89-98`, `deploy/tekton/henia-operator-build.yaml:113`, `:66-67`
+- **Dimension**: Success Criteria
+- **Location**: `hack/verify.sh:90-122`, `:158`, `:311-320`, `:59`
 
-**Detail**:
-- `secretRef: {}` validates. `LocalObjectReference.Name` carries `default: ""` and is not required, so an empty reference is accepted and means nothing. No CEL guard.
-- `git clone --branch` accepts a branch or tag only; a full commit SHA fails with "Remote branch … not found". Both `herd_types.go`'s comment ("branch, tag or commit") and the README ("the git ref to build") imply commits work.
-- Both Tasks declare a `commit` result that no Pipeline surfaces and no step consumes — declared-but-dead output in both files.
+**Detail**: From an exhaustive per-check audit; all err toward FAIL or toward under-reporting, none toward a false PASS:
 
-**Decision**: FIXED — a CEL rule rejects `secretRef: {}` (`x-kubernetes-validations` confirmed present in the generated CRD); the type comment and the README both say "branch or tag" now, with the README explaining that `git clone --branch` will not take a bare SHA; and both Pipelines surface the `commit` result, so it is no longer declared-but-dead.
+- **2.3 is blind to files regeneration creates.** `git diff --quiet -- api config` sees tracked content only; a new untracked artifact leaves it green. `git status --porcelain` would not.
+- **1.1's error-detection branch is dead code.** `droast` exits 1 both when it reports errors and when it cannot read the file, so both land in the `else` reporting "droast exited non-zero" — the FAIL is right, the reason is wrong. Today's PASS is genuine: droast exits 0 with `0 error(s)`.
+- **1.2 duplicates the pins it guards.** `1.26.7` and `v4.15.0` are hardcoded in the check while the pins live in `devcontainer/Dockerfile`. After a version bump the check keeps HEADing the old URLs and passes on something the image no longer downloads. Both URLs were confirmed to return 200 today, including the GitHub redirect.
+- **5.1 counts any succeeded PipelineRun**, not the operator's. Round 2 chose to run the pipeline rather than tighten the check; the looseness survives.
+- **`have_cluster` is true for a reachable API server with no RBAC**, which would make every phase FAIL rather than SKIP.
 
-### F10 — The one container holding the git credential is the only one running as root
+**Decision**: PENDING
+
+### F9 — 5.3 blames the assertion when it cannot parse the file
+
+- **Severity**: 📝 OBSERVATION
+- **Impact**: 🏃 LOW
+- **Dimension**: Success Criteria
+- **Location**: `hack/verify.sh:327-343`
+
+**Detail**: The Python probe exits 1 both when it finds `privileged: true` and when it throws on an unparseable file. The `else` branch reports "no privileged: true in the pipeline definition" either way, so a syntax error in a pipeline YAML is reported as a security assertion failing. Same shape as F1 — the check cannot distinguish "the answer is no" from "I could not ask" — and the fix is the same one applied to 5.5 in round 2.
+
+**Decision**: PENDING
+
+### F10 — A comment in `devcontainer-verify.yaml` refers to its own file in the third person
 
 - **Severity**: 📝 OBSERVATION
 - **Impact**: 🏃 LOW
 - **Dimension**: Pattern Consistency
-- **Location**: `deploy/tekton/henia-operator-build.yaml:73-74`, `deploy/tekton/devcontainer-verify.yaml:71-72`
+- **Location**: `deploy/tekton/devcontainer-verify.yaml:73-78`
 
-**Detail**: Neither clone step sets a `securityContext`, so both run as uid 0 — while `devcontainer-verify.yaml:205-206` argues explicitly that a just-built image "gets no weaker a posture" than the build step. The step that writes `$HOME/.git-credentials` is the one exception to the rule the file states.
+**Detail**: The clone step's comment was copied verbatim from the sibling file and still reads "while `devcontainer-verify.yaml` argues explicitly that…" — inside `devcontainer-verify.yaml`. Cosmetic. Recorded because the two clone steps being otherwise byte-identical is the right outcome and worth keeping visible.
 
-The credential handling itself was verified sound this round: `HOME=/root` exists and is writable in `alpine/git:2.49.0`, the `umask 077` subshell does apply to the redirection, the file lands in the container's own writable layer and never reaches the shared PVC, and nothing copies `$HOME`. Tekton v1.15.0 does not rewrite HOME. All three claims in the step's comment are true as written.
-
-**Decision**: FIXED — both clone steps carry uid/gid 1000, `ALL` capabilities dropped and `RuntimeDefault` seccomp, matching the build step. `HOME` moves to `/tmp` with them: `alpine/git` leaves HOME unset, so the kubelet default is `/root`, which uid 1000 cannot write — and this step writes both `.git-credentials` and `.gitconfig`. **Unverified**: whether uid 1000 can write the `local-path` workspace PVC. That is exactly the kind of assumption that failed twice in round 1's F3, and it is proved or disproved by the pipeline run queued under F2.
+**Decision**: PENDING
 
 ## Automated Verification (re-run during review)
 
 | Criterion | Command | Result |
 | --- | --- | --- |
-| 1.1 | `droast devcontainer/Dockerfile` | PASS — 0 errors, 6 warnings, 6 info (run by hand; not covered by `make verify`, see F7) |
-| 2.1 | `go build ./...` | PASS |
-| 2.2 | `go vet ./...` | PASS |
-| 2.3 | `controller-gen` rbac+crd+object, then `git status` | PASS — no diff, confirmed by running the binary directly rather than through the check (F1) |
+| 1.1 | `droast devcontainer/Dockerfile` | PASS — 0 errors |
+| 1.2 | pinned Go and kubebuilder URLs | PASS — both 200 |
+| 2.1, 2.2 | `go build ./...`, `go vet ./...` | PASS |
+| 2.3 | via `make verify` | PASS — **but the criterion it names is false, see F1** |
 | 2.4–2.7 | via `make verify` | PASS |
-| 3.1, 3.2, 3.6 | via `make verify` | PASS |
+| 3.1, 3.2, 3.6 | via `make verify` | PASS — 3.2 has a reopened empty-body hole, see F2 |
 | 4.1–4.4 | via `make verify` | PASS |
-| 5.1, 5.3, 5.5 | via `make verify` | PASS — 5.1 counts 3 succeeded runs, but see F2: none is the operator pipeline as rewritten |
-| 6.1, 6.2, 6.3, 6.5 | via `make verify` | PASS — 6.3's reconcile log is current, against `herd-sample` under the new schema |
+| 5.1, 5.3, 5.5 | via `make verify` | PASS |
+| 6.1–6.5 | via `make verify` | PASS |
 | 8.1–8.4 | via `make verify` | PASS |
-| D1, D2 | via `make verify` | PASS |
-| **Total** | `make verify` | **30 passed, 0 failed, 13 skipped** |
+| D1, D2 | via `make verify` | PASS — D1 confirms the cluster runs `7c1d139` |
+| **Total** | `make verify` | **32 passed, 0 failed, 13 skipped** |
 
-Six checked automated criteria could not be re-run and rest on implementation-time evidence: 3.3, 3.4 (Harbor robot credential), 3.5 (root on tachiko), 5.2 (Harbor credential), 5.4 (cluster write), 6.4 (destructive). 7.1–7.3 were verified out of band against Prometheus's ClusterIP.
+Independently of the harness: `go build`, `go vet` and a direct controller-gen regeneration are clean; the live Deployment runs `harbor-core.harbor.svc/henia/henia-operator:7c1d139` with `imagePullSecrets: harbor-pull` and reports Available; the live Tekton objects match the repository byte for byte (`harbor-pull`, no `secrets:`, `readOnly: true`, clone at uid 1000 with `HOME=/tmp`, both results surfaced); `bin/` is gitignored and no stale `Foo` reference survives.
+
+7.1–7.3 were last verified before the operator was redeployed — see F7.
 
 ## Manual Verification
 
-Eleven manual criteria, all checked, all with evidence. The audit is materially stronger than round 1:
+Eleven manual criteria, all checked. The audit is stronger than either previous round, and no rubber-stamping was found:
 
-- **1.3, 1.4, 1.5** — solid, and now corroborated by machine: `devcontainer-verify-3`'s `start` task asserted `go1.26.7`, `kubebuilder v4.15.0` and every tool resolving inside the freshly built image, with the version assertions able to fail.
-- **1.6** — was the weakest item in round 1, resting on the operator's word with no artefact. Now closed twice over: the human build, plus a green pipeline that built the image from a clean clone. Its architecture limit is measured rather than predicted — the pipeline proves **amd64**; the arm64 path rests on the manual build.
-- **2.7** — solid, independently re-derivable.
-- **3.6, 7.4** — the two that failed on first check and produced `81c527e` and `da23a3f`. Both re-verified.
-- **5.5** — round 1 noted the review had happened but missed the credential-in-URL exposure. That is now fixed and the file re-reviewed; this round found the credential handling sound, with the residual root-user note at F10.
-- **6.6** — unchanged and still accurate; the demonstration table still describes the throwaway Deployment rather than the real operator.
-- **8.5** — confirmed. Worth re-reading against F8 before archive: the framework's own API now carries the declared type, but the *running* binary predates it.
+- **1.3, 1.4, 1.5** — machine-corroborated twice over: `devcontainer-verify-4`'s start task asserted `go1.26.7`, `kubebuilder v4.15.0` and every tool, with version assertions that can fail.
+- **1.6** — closed by a human clean-context build and by two green pipeline runs. Architecture coverage is explicit: the pipeline proves **amd64**; arm64 rests on the manual build.
+- **2.7** — solid, independently re-derivable, and its check now fails rather than passing vacuously on an unreachable commit.
+- **3.6, 7.4** — the two that failed on first inspection and produced `81c527e` and `da23a3f`; both re-verified since.
+- **4.4** — `v1.15.0`.
+- **5.5** — reviewed three times now. Round 1 missed the credential-in-URL; round 2 fixed it; this round confirmed `HOME=/tmp` is not a regression — the file is 0600 in the step container's own layer, `/tmp` is not mounted from anywhere shared, and no other process runs in that container.
+- **6.6** — unchanged and still accurate; the convention's demonstration table still describes the throwaway Deployment rather than the real operator, which is understatement rather than error.
+- **8.5** — confirmed, and better supported than when it was first agreed: the framework's own API now carries the declared type and the running binary embeds it.
