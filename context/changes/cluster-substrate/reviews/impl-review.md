@@ -5,7 +5,7 @@
 - **Scope**: whole plan — all 8 phases, 43 of 43 Progress items checked. Second round; round 1 is preserved at `git show dfc64fc:context/changes/cluster-substrate/reviews/impl-review.md`
 - **Date**: 2026-08-20
 - **Diff basis**: Progress SHAs. All 25 commits in `main..HEAD` carry the change's `<type>(cluster-substrate):` subject convention and the merge-base range coincides exactly with the change. This round concentrates on `dfc64fc..HEAD` — the three fix commits `9a46f1a`, `b181ab0`, `5893187` — because fixes are where new defects live.
-- **Verdict**: NEEDS ATTENTION
+- **Verdict**: NEEDS ATTENTION — triaged 2026-08-20: all 10 findings fixed, and every fix that touches the cluster verified on it
 - **Findings**: 0 critical, 6 warnings, 4 observations
 
 ## Verdicts
@@ -73,7 +73,7 @@ This is the same defect class as round 1's F3 — code committed and never exerc
 - *Confidence*: High.
 - *Blind spot*: None material.
 
-**Decision**: PENDING
+**Decision**: FIXED — Fix A, in full. The branch was pushed to `origin` (`81c527e..7c1d139`), and `PipelineRun henia-build-3` ran the pipeline **as rewritten** and Succeeded, deriving its own tag: `image=harbor-core.harbor.svc/henia/henia-operator:7c1d139`, `commit=7c1d139`. That exercised the credential rewrite, the per-run workspace path, the results chain and the non-root clone step on the path that actually delivers the operator. `devcontainer-verify-4` had already exercised the same shapes beforehand — including the F10 assumption I could not verify by reading, that uid 1000 can write the `local-path` PVC.
 
 ### F3 — A push-scoped credential does the pulling
 
@@ -176,7 +176,7 @@ But HEAD's API types are not the ones in the running binary, and drift guard D1 
 
 Resolved by F2's Fix A — a rebuild and redeploy closes both — provided the branch is pushed first, since the pipeline clones from Gitea and the operator's source *has* changed since `origin`'s tip.
 
-**Decision**: PENDING
+**Decision**: FIXED — resolved by F2's run, as anticipated. `config/manager/kustomization.yaml` names `7c1d139` and the cluster runs it, so the running binary embeds the current API types rather than a build that predates them. Rollout clean, `imagePullSecrets: harbor-pull` on the live spec, the controller has logged a reconcile since. Verified on the live CRD: `secretRef: {}` is rejected with "secretRef.name must not be empty", a named reference is accepted, and a Herd with no `repositories` is rejected.
 
 ### F9 — Three small correctness gaps in the new API and pipelines
 

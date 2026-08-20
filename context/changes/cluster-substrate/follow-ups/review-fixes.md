@@ -3,28 +3,26 @@
 Deferred or blocked fixes from `reviews/impl-review.md`. A deferred fix leaves
 an artifact here, not only a Decision note in the report.
 
-## Closed 2026-08-20
+## Closed
 
-All four items originally queued here are done — see `b181ab0` and the
-Decision fields in `reviews/impl-review.md`.
+**Round 1 (nine findings)** — all fixed and applied to the cluster; see
+`b181ab0` and `5893187`.
 
-- **F5** — the `prometheus-henia-metrics` ClusterRoleBinding was read off the
-  cluster, committed, and placed in the auto-deploy directory.
-- **F1** — the CRD was re-applied; `herds.henia.dev` serves `repositories` and
-  no longer serves `foo`. The sample Herd was recreated against the new schema.
-- **F2** — a pull-scoped Harbor robot backs the `harbor-pull` Secret in
-  `henia-system`, referenced by the Deployment. Verified: manifest GET 200,
-  push attempt 401.
-- **F3** — `PipelineRun devcontainer-verify-3` Succeeded; the pipeline is no
-  longer unexercised code.
+**Round 2 (ten findings)** — all fixed; see `7c1d139` and `14ba22b`. Every fix
+that touches the cluster has been exercised on it:
+
+- `devcontainer-verify-4` proved the non-root clone step can write the
+  `local-path` PVC, the read-only workspace holds, the ServiceAccount token is
+  absent, and the pull robot fetches the step image.
+- `henia-build-3` ran the operator pipeline **as rewritten** and derived its own
+  tag (`7c1d139`); the operator was redeployed from it, so the running binary
+  embeds the current API types.
+- The CEL guard was checked against the live CRD: `secretRef: {}` rejected, a
+  named reference accepted, a Herd with no `repositories` rejected.
 
 ## Open
 
-Nothing from the review. Two items belong to the change as a whole rather than
-to any finding:
+Nothing from either review round.
 
-- **Push `feature/cluster-substrate`.** `origin` is well behind, which is why
-  the verification pipeline cloned `81c527e` rather than the current tip. The
-  `devcontainer/Dockerfile` it built is byte-identical to the local one, so the
-  run is valid — but the next one should build the real tip.
-- **Rotate the tachiko SSH key.** It was pasted into a session transcript.
+One item belongs to the change as a whole: **rotate the tachiko SSH key.** It
+was pasted into a session transcript three times.
