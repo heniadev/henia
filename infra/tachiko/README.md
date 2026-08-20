@@ -24,6 +24,7 @@ obvious from where it sits here.
 | `usr/local/sbin/refresh-as12912-set.sh` | Fetches AS12912's announced prefixes from RIPEstat and reloads the set in place |
 | `var/lib/rancher/k3s/server/manifests/haproxy-ingress.yaml` | HAProxy ingress via k3s auto-deploy, chart pinned `1.53.0` |
 | `var/lib/rancher/k3s/server/manifests/prometheus.yaml` | Prometheus via k3s auto-deploy, chart pinned `29.27.0` |
+| `var/lib/rancher/k3s/server/manifests/prometheus-henia-metrics-rbac.yaml` | ClusterRoleBinding letting Prometheus read the operator's protected metrics endpoint |
 | `var/lib/rancher/k3s/server/manifests/harbor.yaml` | Harbor registry via k3s auto-deploy, chart pinned `1.19.2`, Trivy disabled |
 | `etc/rancher/k3s/registries.yaml` | containerd registry config — points at Harbor's **in-cluster Service**, not the public hostname |
 | `var/lib/rancher/k3s/server/manifests/tekton-pipelines.yaml.source` | Tekton Pipelines pin (version, URL, sha256) — the 1.6 MB manifest itself is not vendored |

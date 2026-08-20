@@ -75,18 +75,27 @@ spec:
         set -eu
         # The credential never enters the URL. Interpolating it into
         # https://user:pass@host put it in git's argv (readable through /proc
-        # by anything in this pod), in git's own error messages on failure,
-        # and persisted it as remote.origin.url in .git/config on the node's
-        # PVC. GIT_ASKPASS closes all three. Review finding F6.
-        cat > /tmp/askpass <<'ASKPASS'
-        #!/bin/sh
-        case "$1" in
-          Username*) cat /gitea/username ;;
-          Password*) cat /gitea/password ;;
-        esac
-        ASKPASS
-        chmod +x /tmp/askpass
-        export GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0
+        # by anything in this pod), in git's own error messages on failure, and
+        # persisted it as remote.origin.url in .git/config on the node's shared
+        # PVC. Review finding F6.
+        #
+        # git's `store` helper rather than GIT_ASKPASS, and the reason matters:
+        # the password in `gitea-auth` is stored PERCENT-ENCODED. The inline URL
+        # worked only because git decodes userinfo, so an askpass helper - which
+        # hands the value over literally - authenticated with the wrong string
+        # and failed. The store helper parses each line as a URL and decodes it
+        # the same way, so it works with the secret exactly as it is stored.
+        # The credentials file lives in this pod's own filesystem and dies with
+        # it; it never reaches the shared workspace.
+        # Subshell, so the restrictive umask dies with the file it is for. Left
+        # to leak, it also applied to the Tekton result files written at the end
+        # of this step, which the rootless build step then could not read -
+        # "cat: can't open '/tekton/results/image': Permission denied".
+        ( umask 077
+          printf 'https://%s:%s@git.tobiko.kondi.net\n' \
+            "$(cat /gitea/username)" "$(cat /gitea/password)" > "$HOME/.git-credentials" )
+        git config --global credential.helper store
+        export GIT_TERMINAL_PROMPT=0
 
         # One tree per PipelineRun. A single fixed path meant a second run's
         # rm -rf deleted the first run's source mid-build, and the first run

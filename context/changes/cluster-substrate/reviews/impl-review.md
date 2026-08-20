@@ -150,7 +150,7 @@ I could not confirm the binding exists, only that the repo does not create it: t
 - *Confidence*: High that it is missing from the repo; medium on the exact live binding's shape, which I could not read.
 - *Blind spot*: The live binding may be named or scoped differently from what I would write; it should be read from the cluster before being committed.
 
-**Decision**: PENDING — accepted (read the live binding and track it), but blocked: the read-only identity cannot list ClusterRoleBindings, so the live shape has to be read with cluster access. Queued with the other cluster-side actions.
+**Decision**: FIXED — read off the running cluster and committed verbatim. The binding is `prometheus-henia-metrics`: ServiceAccount `prometheus-server` in `monitoring` → ClusterRole `henia-metrics-reader`. It now lives at `infra/tachiko/var/lib/rancher/k3s/server/manifests/prometheus-henia-metrics-rbac.yaml`, is indexed in `infra/tachiko/README.md`, and has been placed in the host's auto-deploy directory so k3s manages it rather than it surviving as hand-applied state. The comment in `prometheus.yaml` that used to assert the binding now points at the file that creates it.
 
 ### F6 — The clone credential travels in the git URL
 

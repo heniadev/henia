@@ -28,7 +28,10 @@ spec:
       # NOT relaxed: the previous change's most severe finding was an
       # unauthenticated metrics surface, and turning authn off here would reopen
       # that class one change later. Prometheus authenticates with its own
-      # ServiceAccount token, authorised by the henia-metrics-reader ClusterRole.
+      # ServiceAccount token, authorised by the henia-metrics-reader ClusterRole
+      # via prometheus-henia-metrics-rbac.yaml in this directory - which is
+      # tracked, as of review finding F5. This comment previously asserted that
+      # binding while nothing in the repository created it.
       - job_name: henia-operator
         scheme: https
         tls_config:

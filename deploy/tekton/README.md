@@ -14,11 +14,20 @@ Both Secrets live in `default` and are referenced by name only:
 
 | Secret | Type | Used by | Contents |
 | --- | --- | --- | --- |
-| `gitea-auth` | `Opaque` | clone step, mounted at `/gitea` | keys `username`, `password` — a Gitea identity with **read** access to `kondi/henia` |
+| `gitea-auth` | `Opaque` | clone step, mounted at `/gitea` | keys `username`, `password` — a Gitea identity with **read** access to `kondi/henia`. The password is stored **percent-encoded**; see below |
 | `harbor-push` | `kubernetes.io/dockerconfigjson` | build step, mounted at `/harbor` | the Harbor **robot** credential holding push rights on the `henia` project only |
 
 Neither is admin: the clone identity cannot write to the repository, and the
 push identity cannot touch any Harbor project but `henia`.
+
+**The Gitea password is percent-encoded in the Secret.** This is not obvious and
+it has already cost one failed pipeline run: the original clone step interpolated
+it into `https://user:pass@host`, which worked only because git decodes userinfo.
+Handing the stored value to an askpass helper authenticates with the literal
+encoded string and fails. The clone step therefore uses git's `store` credential
+helper, which parses its file as a URL and decodes identically — so the secret
+works as stored, while the credential stays out of argv, out of git's error
+output and out of `remote.origin.url` on the shared workspace.
 
 Apply the tracked objects once:
 
