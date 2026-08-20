@@ -250,6 +250,10 @@ spec:
       type: string
   workspaces:
     - name: source
+  results:
+    - name: image
+      description: The image reference actually built, tag included.
+      value: $(tasks.build.results.image)
   tasks:
     - name: build
       taskRef:
