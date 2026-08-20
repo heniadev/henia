@@ -1,0 +1,160 @@
+# Verification build for the devcontainer image (cluster-substrate criterion 1.6).
+#
+# The criterion reads "the rebuilt image builds from a clean context and the
+# container starts with the repository mounted", and it was written as a manual
+# check for a good reason: the executor runs INSIDE the container being rebuilt
+# and has no container build tooling. That reason does not apply to a pipeline.
+#
+# Two things this does better than a local `docker build --no-cache`:
+#
+#   Clean by construction. A fresh PVC and a fresh clone are the context; a
+#   BuildKit pod has no layer cache to begin with. Nothing depends on anyone
+#   remembering the flag.
+#
+#   No credentials in the context. `docker build devcontainer/` on a workstation
+#   sends the WHOLE directory to the daemon - including devcontainer/creds.yaml
+#   and devcontainer/kubeconfig.yaml, both gitignored precisely because they hold
+#   secrets. A clone has neither, so the pipeline builds the context the image is
+#   actually supposed to have.
+#
+# What it does NOT verify, and no unprivileged pipeline can: run.sh's runtime
+# path - docker run with bind mounts, a named volume, --cap-add NET_ADMIN/
+# NET_RAW/SETUID/SETGID, the in-container firewall and the gosu privilege drop.
+# Reproducing that needs docker-in-docker or a privileged pod, which criterion
+# 5.3 forbids. The `start` step below runs the built image with the workspace
+# mounted, which demonstrates that the image starts and sees a mounted
+# repository; it does not exercise run.sh. That distinction is the honest limit
+# of this pipeline, and it is why 1.6 is not simply reclassified as automated.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: devcontainer-verify-workspace
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: devcontainer-verify
+  namespace: default
+spec:
+  params:
+    - name: revision
+      type: string
+      description: Git revision to build. Not defaulted, for the reason given in henia-operator-build.yaml.
+    - name: image
+      type: string
+      description: Fully qualified image reference including tag.
+  workspaces:
+    - name: source
+  steps:
+    - name: clone
+      image: alpine/git:2.49.0
+      script: |
+        #!/bin/sh
+        set -eu
+        rm -rf "$(workspaces.source.path)/repo"
+        git clone --depth 1 --branch "$(params.revision)" \
+          "https://$(cat /gitea/username):$(cat /gitea/password)@git.tobiko.kondi.net/kondi/henia.git" \
+          "$(workspaces.source.path)/repo"
+        cd "$(workspaces.source.path)/repo"
+        echo "cloned $(params.revision) at $(git rev-parse --short HEAD)"
+        # The context is what git tracks, and nothing else. Say so out loud:
+        # the absence of these two is a property being verified, not an accident.
+        for f in creds.yaml kubeconfig.yaml; do
+          if [ -e "devcontainer/$f" ]; then
+            echo "FAIL: devcontainer/$f is in the build context" >&2
+            exit 1
+          fi
+        done
+        echo "context carries no gitignored credential files"
+      volumeMounts:
+        - name: gitea
+          mountPath: /gitea
+          readOnly: true
+    - name: build-and-push
+      image: moby/buildkit:v0.32.2-rootless
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: Unconfined
+        appArmorProfile:
+          type: Unconfined
+      env:
+        - name: BUILDKITD_FLAGS
+          value: --oci-worker-no-process-sandbox
+        - name: DOCKER_CONFIG
+          value: /home/user/.docker
+      script: |
+        #!/bin/sh
+        set -eu
+        mkdir -p /home/user/.docker
+        cp /harbor/.dockerconfigjson /home/user/.docker/config.json
+        cd "$(workspaces.source.path)/repo/devcontainer"
+        buildctl-daemonless.sh build \
+          --frontend dockerfile.v0 \
+          --local context=. \
+          --local dockerfile=. \
+          --output type=image,name=$(params.image),push=true,registry.insecure=true
+      volumeMounts:
+        - name: harbor
+          mountPath: /harbor
+          readOnly: true
+    - name: start
+      # The step's container IS the freshly built image, with the cloned
+      # repository on the workspace mount - the closest an unprivileged pipeline
+      # gets to "the container starts with the repository mounted".
+      image: $(params.image)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        echo "arch:        $(uname -m)"
+        echo "go:          $(go version)"
+        echo "kubebuilder: $(kubebuilder version 2>&1 | head -1)"
+        for t in kubectl tea kustomize sops make; do
+          command -v "$t" >/dev/null || { echo "FAIL: $t missing" >&2; exit 1; }
+        done
+        echo "tools:       kubectl tea kustomize sops make all resolve"
+        test -d "$(workspaces.source.path)/repo/.git" \
+          || { echo "FAIL: repository not visible on the mount" >&2; exit 1; }
+        echo "repository:  visible at $(workspaces.source.path)/repo"
+  volumes:
+    - name: gitea
+      secret:
+        secretName: gitea-auth
+    - name: harbor
+      secret:
+        secretName: harbor-push
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: devcontainer-verify
+  namespace: default
+spec:
+  params:
+    - name: revision
+      type: string
+    - name: image
+      type: string
+  workspaces:
+    - name: source
+  tasks:
+    - name: verify
+      taskRef:
+        name: devcontainer-verify
+      params:
+        - name: revision
+          value: $(params.revision)
+        - name: image
+          value: $(params.image)
+      workspaces:
+        - name: source
+          workspace: source

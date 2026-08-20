@@ -79,6 +79,53 @@ The registry hostname is Harbor's **in-cluster Service**
 `infra/tachiko/etc/rancher/k3s/registries.yaml` for why, and for the insecure
 (HTTP) declaration that lets containerd pull it.
 
+## Verifying the devcontainer image (criterion 1.6)
+
+`devcontainer-verify.yaml` builds `devcontainer/Dockerfile` the same way and
+then runs the result with the cloned repository on the workspace mount.
+
+```sh
+REV=feature/cluster-substrate
+SHA=$(git rev-parse --short "$REV")
+
+kubectl apply -f deploy/tekton/devcontainer-verify.yaml
+kubectl create -f - <<YAML
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: devcontainer-verify-
+  namespace: default
+spec:
+  pipelineRef:
+    name: devcontainer-verify
+  taskRunTemplate:
+    serviceAccountName: tekton-build
+  timeouts:
+    pipeline: 1h
+  params:
+    - name: revision
+      value: ${REV}
+    - name: image
+      value: harbor-core.harbor.svc/henia/devcontainer:${SHA}
+  workspaces:
+    - name: source
+      persistentVolumeClaim:
+        claimName: devcontainer-verify-workspace
+YAML
+```
+
+Two caveats it prints rather than hides:
+
+- **Architecture.** The build runs on tachiko, so it exercises the Dockerfile's
+  path for tachiko's architecture. A developer machine of a different
+  architecture takes the other branch of every `dpkg --print-architecture` case
+  in that file. The `start` step echoes `uname -m` so the run says which one it
+  proved.
+- **run.sh is not exercised.** The step runs the image with a mount; it does not
+  reproduce `docker run` with bind mounts, added capabilities, the in-container
+  firewall or the gosu privilege drop. Those are verified by using the
+  devcontainer, which happens every session.
+
 ## Deploying what was built
 
 The image tag is the one value the deployment consumes. Bump it in the tracked
