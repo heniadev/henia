@@ -646,7 +646,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 - [x] 1.3 `go version` reports 1.26.x inside the rebuilt container — 34f444a
 - [x] 1.4 `kubebuilder version` reports v4.15.0 — 34f444a
 - [x] 1.5 `kubectl`, `tea`, `kustomize` and `sops` still resolve — 34f444a
-- [ ] 1.6 The rebuilt image builds from a clean context and the container starts with the repository mounted
+- [x] 1.6 The rebuilt image builds from a clean context and the container starts with the repository mounted — 34f444a
 
 ### Phase 2: Operator scaffold
 
