@@ -131,6 +131,17 @@ tracked under `infra/tachiko/` in the same commit that applies it — the previo
 change's review found that copy drifting on its first edit, so the discipline is
 stated here rather than assumed.
 
+> **Amended after implementation review (F8, 2026-08-20).** Two classes of asset
+> are a deliberate exception to the auto-deploy half of that rule, though not to
+> the tracking half. The operator is managed by kustomize under `config/` and
+> applied with `kustomize build config/default | kubectl apply -f -`; the Tekton
+> Pipeline, Task, PVC and ServiceAccount live in `deploy/tekton/` and are applied
+> the same way. Rendering either into the auto-deploy directory would create a
+> second source of truth against its own base, which is a worse failure than the
+> one the rule guards against. Both remain tracked, and `hack/verify.sh`'s D1
+> guard asserts that `config/` renders the image the cluster is actually running.
+> The blanket wording above was written before those bases existed.
+
 ## Critical Implementation Details
 
 - **API group composition.** `kubebuilder init --domain henia.dev`, then `create

@@ -143,13 +143,21 @@ fi
 # The subdir-then-move must not have overwritten anything the repo owns. Only
 # three files outside the scaffold were touched, and the Dockerfile edit was a
 # single added line (make), not a replacement.
-strays="$(git show --name-only --format= 2604250 2>/dev/null \
-          | grep -E '^(context|infra|devcontainer|docs|content)/' \
-          | grep -vE '^(context/changes/cluster-substrate/(plan|change)\.md|devcontainer/Dockerfile)$')"
-if [[ -z "$strays" ]]; then
-  pass "2.7" "scaffold overwrote nothing under context/ infra/ devcontainer/ docs/ content/"
+# Errors are NOT discarded here. With 2>/dev/null an unreachable commit - a
+# shallow clone, rewritten history, the wrong repository - produced empty
+# output and this check reported PASS having inspected nothing. Review
+# finding F4: a check that cannot run must say so, never pass.
+if ! scaffold="$(git show --name-only --format= 2604250 2>&1)"; then
+  fail "2.7" "scaffold overwrote nothing the repo owns" \
+       "commit 2604250 unreachable: ${scaffold%%$'\n'*}"
 else
-  fail "2.7" "scaffold overwrote nothing the repo owns" "unexpected: $(echo "$strays" | tr '\n' ' ')"
+  strays="$(grep -E '^(context|infra|devcontainer|docs|content)/' <<<"$scaffold" \
+            | grep -vE '^(context/changes/cluster-substrate/(plan|change)\.md|devcontainer/Dockerfile)$')"
+  if [[ -z "$strays" ]]; then
+    pass "2.7" "scaffold overwrote nothing under context/ infra/ devcontainer/ docs/ content/"
+  else
+    fail "2.7" "scaffold overwrote nothing the repo owns" "unexpected: $(echo "$strays" | tr '\n' ' ')"
+  fi
 fi
 
 # ---------------------------------------------------------------- phase 3 ----
@@ -221,7 +229,13 @@ if [[ "$have_cluster" == 1 ]]; then
     fail "4.4" "current track, not LTS" "release label reads '${rel:-unknown}'"
   fi
 else
-  skip "4.1" "Tekton health" "no cluster access"
+  # Every criterion gets its own SKIP. Emitting one per phase made the rest
+  # vanish from both the table and the "stays unconfirmed" list - silently,
+  # which is the one thing this script promises not to do. Review finding F4.
+  skip "4.1" "controller and webhook Ready"     "no cluster access"
+  skip "4.2" "Tekton CRDs registered"           "no cluster access"
+  skip "4.3" "deployed release is v1.15.0"      "no cluster access"
+  skip "4.4" "current track, not LTS"           "no cluster access"
 fi
 
 # ---------------------------------------------------------------- phase 5 ----
@@ -300,7 +314,11 @@ if [[ "$have_cluster" == 1 ]]; then
     fail "6.5" "operator has resource requests and limits" "got '${res:-none}'"
   fi
 else
-  skip "6.1" "operator deployment health" "no cluster access"
+  skip "6.1" "Deployment reports Available"          "no cluster access"
+  skip "6.2" "'kubectl explain herd' resolves"       "no cluster access"
+  skip "6.3" "controller has logged a reconcile"     "no cluster access"
+  skip "6.4" "deleted pod is replaced"               "no cluster access"
+  skip "6.5" "resource requests and limits"          "no cluster access"
 fi
 
 skip "6.6" "supervision convention still accurate" "a judgement: read context/foundation/supervision-convention.md"
@@ -317,14 +335,18 @@ if [[ -z "$PROM_AUTH" ]]; then
   skip "7.4" "exactly one target, and it is up" "set PROM_AUTH=user:password"
 else
   targets="$(prom /api/v1/targets --data-urlencode 'state=active' 2>/dev/null)"
-  total="$(grep -o '"job":"henia-operator"' <<<"$targets" | wc -l | tr -d ' ')"
-  up="$(python3 - "$targets" <<'PY' 2>/dev/null
+  # Both halves counted by the same parser. Counting `total` with a grep over
+  # raw JSON while counting `up` with a parser meant the two disagreed:
+  # Prometheus emits the job label in discoveredLabels as well as labels, so
+  # one healthy target could count as two. Review finding F4.
+  counts="$(python3 - "$targets" <<'PY' 2>/dev/null
 import json,sys
 d=json.loads(sys.argv[1])
 t=[x for x in d["data"]["activeTargets"] if x["labels"].get("job")=="henia-operator"]
-print(sum(1 for x in t if x["health"]=="up"))
+print(len(t), sum(1 for x in t if x["health"]=="up"))
 PY
 )"
+  total="${counts%% *}"; up="${counts##* }"
   if [[ "${up:-0}" -ge 1 ]]; then
     pass "7.1" "operator is an up target in Prometheus"
   else
@@ -378,7 +400,10 @@ if [[ "$have_cluster" == 1 ]]; then
     && pass "8.4" "reading Secret contents is still denied" \
     || fail "8.4" "reading Secret contents is still denied"
 else
-  skip "8.1" "read-back" "no cluster access"
+  skip "8.1" "identity lists Herd resources"      "no cluster access"
+  skip "8.2" "writes to Herd are denied"          "no cluster access"
+  skip "8.3" "identity reads the Deployment"      "no cluster access"
+  skip "8.4" "Secret contents still denied"       "no cluster access"
 fi
 
 skip "8.5" "F-01's outcome agreed as satisfied" "a judgement, not a query"
@@ -407,7 +432,8 @@ if [[ "$have_cluster" == 1 ]]; then
          "the fix in infra/tachiko/.../prometheus.yaml has not been applied on the host"
   fi
 else
-  skip "D1" "repository vs cluster drift" "no cluster access"
+  skip "D1" "config/ renders the running image"        "no cluster access"
+  skip "D2" "live scrape config keeps one port only"   "no cluster access"
 fi
 
 # ------------------------------------------------------------- summary -------

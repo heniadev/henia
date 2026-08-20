@@ -5,7 +5,7 @@
 - **Scope**: whole plan — all 8 phases, 43 of 43 Progress items checked
 - **Date**: 2026-08-20
 - **Diff basis**: Progress SHAs. All 21 commits in `main..HEAD` carry the change's `<type>(cluster-substrate):` subject convention and the merge-base range coincides exactly with the change, so the anchor is complete rather than partial. 64 changed files, of which ~40 are unmodified kubebuilder scaffold.
-- **Verdict**: REWORK REQUIRED
+- **Verdict**: REWORK REQUIRED — triaged 2026-08-20: 8 of 9 findings fixed, F5 blocked on cluster access and queued
 - **Findings**: 3 critical, 4 warnings, 2 observations
 
 ## Verdicts
@@ -52,7 +52,7 @@ Criteria 2.4 and 2.5 passed because they assert group, version, kind, categories
 - *Confidence*: High that it is safe; low that it is wise.
 - *Blind spot*: Whether F-01's outcome statement can honestly be called satisfied with a placeholder type is a judgement I am not the one to make — 8.5 was already confirmed on other grounds.
 
-**Decision**: PENDING
+**Decision**: FIXED — applied differently, at the operator's direction. A minimal working schema rather than the full FR-450 design: `repositories[]` (required, MinItems=1) each carrying `url`, an optional `revision` and an optional `secretRef`, plus an optional `targetNamespace`. `revision` was added beyond the three fields requested, because this change was already bitten once by a clone with no ref building a tree that lacked the code it was meant to build. `observedGeneration` was deliberately NOT added: the reconciler is a no-op, so it would be a status field that is always empty. Regeneration is idempotent, build and vet clean. The CRD still needs re-applying on the cluster before the schema is live.
 
 ### F2 — The operator has no image-pull credential path; it runs on a cached image
 
@@ -81,7 +81,7 @@ One thing I could not check: the host's actual `/etc/rancher/k3s/registries.yaml
 - *Confidence*: High that it works; it is the standard k3s pattern.
 - *Blind spot*: Whether anything else pulls from this registry and would be affected.
 
-**Decision**: PENDING
+**Decision**: FIXED — Fix A. `config/manager/manager.yaml` now declares `imagePullSecrets: [harbor-pull]`, and the false claim in `registries.yaml` is replaced by one that names where the secret actually is, with a line recording what it used to assert. The Secret itself is created out-of-band and not committed, like the other four. **Not yet effective**: the Secret does not exist on the cluster and the Deployment has not been re-applied, so the operator is still running on the cached image until both happen.
 
 ### F3 — The devcontainer-verify pipeline cannot run, and its key assertion cannot fail
 
@@ -108,7 +108,7 @@ One thing I could not check: the host's actual `/etc/rancher/k3s/registries.yaml
 - *Confidence*: High.
 - *Blind spot*: None material.
 
-**Decision**: PENDING
+**Decision**: FIXED — Fix A, all three defects. `start` is now its own `devcontainer-start` Task with `runAfter: [build]`, so its pod is created after the image exists. Its assertion loop covers `go` and `kubebuilder` as hard checks and additionally asserts the versions (`go1.26.`, `v4.15.0`), which makes it verify criteria 1.3–1.5 in the image rather than merely print them. It carries a `securityContext` matching its sibling — uid/gid 1000, `ALL` capabilities dropped, `RuntimeDefault` seccomp. **Still unexercised**: a PipelineRun has not been executed, which is the remaining half of this decision.
 
 ### F4 — `hack/verify.sh` under-reports: silent omissions and one vacuous pass
 
@@ -129,7 +129,7 @@ One thing I could not check: the host's actual `/etc/rancher/k3s/registries.yaml
 - *Confidence*: High — the omission is directly readable, and the 2.7 vacuous pass reproduces with any unknown SHA.
 - *Blind spot*: The 7.4 double-counting is reasoned from Prometheus's documented response shape, not observed — the path has never run.
 
-**Decision**: PENDING
+**Decision**: FIXED — all three. Every criterion now emits its own SKIP in the no-cluster branches: the suite reports 43 checks with a cluster and 43 without, where it previously dropped nine silently. 2.7 no longer discards git's errors and FAILs on an unreachable commit — verified by substituting a bogus SHA, which now produces `FAIL 2.7 … commit deadbee unreachable` where it previously produced PASS. 7.4 counts targets and `up` with the same parser.
 
 ### F5 — Prometheus's metrics-reader authorisation exists only in the cluster
 
@@ -150,7 +150,7 @@ I could not confirm the binding exists, only that the repo does not create it: t
 - *Confidence*: High that it is missing from the repo; medium on the exact live binding's shape, which I could not read.
 - *Blind spot*: The live binding may be named or scoped differently from what I would write; it should be read from the cluster before being committed.
 
-**Decision**: PENDING
+**Decision**: PENDING — accepted (read the live binding and track it), but blocked: the read-only identity cannot list ClusterRoleBindings, so the live shape has to be read with cluster access. Queued with the other cluster-side actions.
 
 ### F6 — The clone credential travels in the git URL
 
@@ -169,7 +169,7 @@ Worth noting for the record: criterion 5.5 — "the pipeline definition is revie
 - *Confidence*: High — all three exposure paths are standard git behaviour.
 - *Blind spot*: I did not check whether the PVC's contents are readable by other workloads on this single-node cluster; the exposure window is real but its reachability is unquantified.
 
-**Decision**: PENDING
+**Decision**: FIXED — `GIT_ASKPASS` in both pipelines. The clone URL no longer carries the credential, so it is absent from git's argv, from git's error output, and from `remote.origin.url` in the persisted `.git/config`.
 
 ### F7 — Concurrent PipelineRuns clobber each other's source
 
@@ -182,7 +182,7 @@ Worth noting for the record: criterion 5.5 — "the pipeline definition is revie
 
 **Fix**: include `$(context.pipelineRun.name)` in the clone path.
 
-**Decision**: PENDING
+**Decision**: FIXED — each PipelineRun clones into its own tree, named by `$(context.pipelineRun.name)` passed from the Pipeline. Trees older than three days are pruned at clone time so the workspace does not grow without bound; three days exceeds any run, so a concurrent run is never the one pruned.
 
 ### F8 — The operator and the Tekton assets bypass k3s auto-deploy
 
@@ -195,7 +195,7 @@ Worth noting for the record: criterion 5.5 — "the pipeline definition is revie
 
 Both are tracked, and drift guard D1 in `hack/verify.sh` compares the rendered image against the running one — a reasonable compensating control. Recording this as an observation rather than a warning because a rendered copy in the auto-deploy directory would create a second source of truth against the kustomize base, which is a worse outcome. The plan's blanket statement is what needs amending, not the implementation.
 
-**Decision**: PENDING
+**Decision**: FIXED — the plan's wording is amended, not the implementation. A note under Implementation Approach records that kustomize-managed and hand-applied assets are a deliberate exception to the auto-deploy half of the rule but not to the tracking half, with D1 as the compensating control, and that the blanket wording predates those bases. The Progress section was not touched.
 
 ### F9 — The image tag is not derived from the revision the pipeline cloned
 
@@ -206,7 +206,7 @@ Both are tracked, and drift guard D1 in `hack/verify.sh` compares the rendered i
 
 **Detail**: Phase 5 says images are tagged with the short commit SHA of the revision built, so that a deployment names exactly one build. The Task takes a fully-formed `image` param and never derives the tag; the short SHA is computed on the *caller's* local clone. The clone step does compute the real short SHA and echoes it — but nothing binds the two. A caller whose working copy differs from the branch tip tags the image with a SHA the pipeline did not build. Convention rather than mechanism.
 
-**Decision**: PENDING
+**Decision**: FIXED — the tag is now derived where the tree is. The clone step writes the real short SHA to a Tekton result and the build step tags from it; the `image` parameter is the repository without a tag, and the resolved reference is published as a Pipeline result for the deploy step to read. In `devcontainer-verify` the start task consumes `$(tasks.build.results.image)` rather than the untagged parameter. The README no longer asks the caller to compute a SHA from their own working copy.
 
 ## Automated Verification (re-run during review)
 

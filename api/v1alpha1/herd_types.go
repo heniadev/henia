@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -24,16 +25,41 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// HerdSpec defines the desired state of Herd
-type HerdSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+// RepositoryRef declares one repository a Herd spans.
+type RepositoryRef struct {
+	// url is the clone URL of the repository.
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
 
-	// foo is an example field of Herd. Edit herd_types.go to remove/update
+	// revision is the branch, tag or commit to track. Naming it is
+	// deliberately encouraged rather than defaulted: this project has already
+	// been bitten once by a clone with no ref, which took a default branch and
+	// produced a tree missing the very code it was meant to build. Empty means
+	// the repository's default branch, which is a choice, not an absence.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	Revision string `json:"revision,omitempty"`
+
+	// secretRef names a Secret in the Herd's own namespace holding the
+	// credential used to clone this repository. Omit it for a public one.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+}
+
+// HerdSpec defines the desired state of Herd - the declaration a person
+// writes. Its counterpart is HerdStatus, which represents the instance
+// running from that declaration; there is deliberately no companion
+// "Instance" kind, for the reasons recorded on the Herd type below.
+type HerdSpec struct {
+	// repositories are the repositories this herd spans - one, several, or a
+	// monorepo. A herd crosses repository boundaries by construction, which is
+	// why there is no separate grouping kind.
+	// +kubebuilder:validation:MinItems=1
+	Repositories []RepositoryRef `json:"repositories"`
+
+	// targetNamespace is where the instance's components run. Empty means the
+	// Herd's own namespace.
+	// +optional
+	TargetNamespace string `json:"targetNamespace,omitempty"`
 }
 
 // HerdStatus defines the observed state of Herd.

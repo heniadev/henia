@@ -21,9 +21,9 @@
 # path - docker run with bind mounts, a named volume, --cap-add NET_ADMIN/
 # NET_RAW/SETUID/SETGID, the in-container firewall and the gosu privilege drop.
 # Reproducing that needs docker-in-docker or a privileged pod, which criterion
-# 5.3 forbids. The `start` step below runs the built image with the workspace
-# mounted, which demonstrates that the image starts and sees a mounted
-# repository; it does not exercise run.sh. That distinction is the honest limit
+# 5.3 forbids. The `devcontainer-start` Task below runs the built image with
+# the workspace mounted, which demonstrates that the image starts and sees a
+# mounted repository; it does not exercise run.sh. That distinction is the honest limit
 # of this pipeline, and it is why 1.6 is not simply reclassified as automated.
 ---
 apiVersion: v1
@@ -50,7 +50,21 @@ spec:
       description: Git revision to build. Not defaulted, for the reason given in henia-operator-build.yaml.
     - name: image
       type: string
-      description: Fully qualified image reference including tag.
+      description: >-
+        Image repository WITHOUT a tag. The tag is derived from the revision the
+        pipeline actually cloned, not supplied by the caller: a caller computing
+        the short SHA from their own working copy tags the image with a commit
+        the pipeline never built. Review finding F9.
+    - name: runId
+      type: string
+      description: >-
+        Identifier of the run, used to give each PipelineRun its own tree on
+        the shared workspace. The Pipeline passes $(context.pipelineRun.name).
+  results:
+    - name: commit
+      description: Short commit SHA of the revision actually cloned.
+    - name: image
+      description: Fully qualified image reference, including the derived tag.
   workspaces:
     - name: source
   steps:
@@ -59,12 +73,39 @@ spec:
       script: |
         #!/bin/sh
         set -eu
-        rm -rf "$(workspaces.source.path)/repo"
+        # The credential never enters the URL. Interpolating it into
+        # https://user:pass@host put it in git's argv (readable through /proc
+        # by anything in this pod), in git's own error messages on failure,
+        # and persisted it as remote.origin.url in .git/config on the node's
+        # PVC. GIT_ASKPASS closes all three. Review finding F6.
+        cat > /tmp/askpass <<'ASKPASS'
+        #!/bin/sh
+        case "$1" in
+          Username*) cat /gitea/username ;;
+          Password*) cat /gitea/password ;;
+        esac
+        ASKPASS
+        chmod +x /tmp/askpass
+        export GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0
+
+        # One tree per PipelineRun. A single fixed path meant a second run's
+        # rm -rf deleted the first run's source mid-build, and the first run
+        # then failed with a corrupted-tree error that read like a Dockerfile
+        # fault. Review finding F7. Trees older than three days are pruned so
+        # the workspace does not grow without bound; three days is longer than
+        # any run, so a concurrent run is never the one pruned.
+        DEST="$(workspaces.source.path)/$(params.runId)/repo"
+        find "$(workspaces.source.path)" -mindepth 1 -maxdepth 1 -type d \
+             -mtime +3 -exec rm -rf {} + 2>/dev/null || true
+        rm -rf "$DEST"
+        mkdir -p "$(dirname "$DEST")"
         git clone --depth 1 --branch "$(params.revision)" \
-          "https://$(cat /gitea/username):$(cat /gitea/password)@git.tobiko.kondi.net/kondi/henia.git" \
-          "$(workspaces.source.path)/repo"
-        cd "$(workspaces.source.path)/repo"
-        echo "cloned $(params.revision) at $(git rev-parse --short HEAD)"
+          "https://git.tobiko.kondi.net/kondi/henia.git" "$DEST"
+        cd "$DEST"
+        SHA="$(git rev-parse --short HEAD)"
+        echo "cloned $(params.revision) at $SHA"
+        printf '%s' "$SHA" > "$(results.commit.path)"
+        printf '%s:%s' "$(params.image)" "$SHA" > "$(results.image.path)"
         # The context is what git tracks, and nothing else. Say so out loud:
         # the absence of these two is a property being verified, not an accident.
         for f in creds.yaml kubeconfig.yaml; do
@@ -97,34 +138,18 @@ spec:
         set -eu
         mkdir -p /home/user/.docker
         cp /harbor/.dockerconfigjson /home/user/.docker/config.json
-        cd "$(workspaces.source.path)/repo/devcontainer"
+        IMAGE="$(cat "$(results.image.path)")"
+        echo "building $IMAGE"
+        cd "$(workspaces.source.path)/$(params.runId)/repo/devcontainer"
         buildctl-daemonless.sh build \
           --frontend dockerfile.v0 \
           --local context=. \
           --local dockerfile=. \
-          --output type=image,name=$(params.image),push=true,registry.insecure=true
+          --output type=image,name="$IMAGE",push=true,registry.insecure=true
       volumeMounts:
         - name: harbor
           mountPath: /harbor
           readOnly: true
-    - name: start
-      # The step's container IS the freshly built image, with the cloned
-      # repository on the workspace mount - the closest an unprivileged pipeline
-      # gets to "the container starts with the repository mounted".
-      image: $(params.image)
-      script: |
-        #!/bin/bash
-        set -euo pipefail
-        echo "arch:        $(uname -m)"
-        echo "go:          $(go version)"
-        echo "kubebuilder: $(kubebuilder version 2>&1 | head -1)"
-        for t in kubectl tea kustomize sops make; do
-          command -v "$t" >/dev/null || { echo "FAIL: $t missing" >&2; exit 1; }
-        done
-        echo "tools:       kubectl tea kustomize sops make all resolve"
-        test -d "$(workspaces.source.path)/repo/.git" \
-          || { echo "FAIL: repository not visible on the mount" >&2; exit 1; }
-        echo "repository:  visible at $(workspaces.source.path)/repo"
   volumes:
     - name: gitea
       secret:
@@ -132,6 +157,76 @@ spec:
     - name: harbor
       secret:
         secretName: harbor-push
+---
+# A SEPARATE Task, not a fourth step, and that is the whole point.
+#
+# Tekton compiles every step of a Task into containers of ONE pod, and the
+# kubelet pulls all of those images when the pod is created - before any step
+# script runs. A step whose image is the one a LATER step builds therefore
+# enters ImagePullBackOff at pod creation, and the build that would have
+# produced it never happens. The first version of this file did exactly that
+# and could never have completed a run; implementation review F3 caught it
+# before it ever ran.
+#
+# As its own Task with runAfter, this pod is created only once the build
+# TaskRun has finished and the image is in Harbor.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: devcontainer-start
+  namespace: default
+spec:
+  params:
+    - name: image
+      type: string
+      description: The image built by devcontainer-verify, to be started here.
+    - name: runId
+      type: string
+      description: >-
+        Identifier of the run, used to give each PipelineRun its own tree on
+        the shared workspace. The Pipeline passes $(context.pipelineRun.name).
+  workspaces:
+    - name: source
+  steps:
+    - name: start
+      # The step's container IS the freshly built image, with the cloned
+      # repository on the workspace mount - the closest an unprivileged
+      # pipeline gets to "the container starts with the repository mounted".
+      image: $(params.image)
+      # The sibling build step is pinned to uid/gid 1000; a just-built,
+      # unvetted image gets no weaker a posture. node:22-slim carries uid 1000.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        echo "arch: $(uname -m)"
+
+        # Every tool is a HARD assertion. The first version printed go and
+        # kubebuilder inside command substitutions, where set -e does not
+        # propagate the exit status - so an image with no Go toolchain printed
+        # a blank line and passed. The two tools phase 1 added were the only
+        # two the check could not fail on. Review finding F3.
+        for t in go kubebuilder kubectl tea kustomize sops make; do
+          command -v "$t" >/dev/null || { echo "FAIL: $t missing" >&2; exit 1; }
+        done
+
+        go version | grep -q 'go1\.26\.' \
+          || { echo "FAIL: go is $(go version), expected 1.26.x" >&2; exit 1; }
+        kubebuilder version | grep -q 'v4\.15\.0' \
+          || { echo "FAIL: kubebuilder is not v4.15.0" >&2; exit 1; }
+        echo "toolchain: $(go version), kubebuilder v4.15.0, all tools resolve"
+
+        test -d "$(workspaces.source.path)/$(params.runId)/repo/.git" \
+          || { echo "FAIL: repository not visible on the mount" >&2; exit 1; }
+        echo "repository: visible at $(workspaces.source.path)/$(params.runId)/repo"
 ---
 apiVersion: tekton.dev/v1
 kind: Pipeline
@@ -147,7 +242,7 @@ spec:
   workspaces:
     - name: source
   tasks:
-    - name: verify
+    - name: build
       taskRef:
         name: devcontainer-verify
       params:
@@ -155,6 +250,22 @@ spec:
           value: $(params.revision)
         - name: image
           value: $(params.image)
+        - name: runId
+          value: $(context.pipelineRun.name)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: start
+      runAfter: [build]
+      taskRef:
+        name: devcontainer-start
+      params:
+        # The resolved reference from the build task, tag included - not the
+        # untagged repository the Pipeline was given.
+        - name: image
+          value: $(tasks.build.results.image)
+        - name: runId
+          value: $(context.pipelineRun.name)
       workspaces:
         - name: source
           workspace: source

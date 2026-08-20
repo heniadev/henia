@@ -65,10 +65,54 @@ spec:
           spec:
             description: spec defines the desired state of Herd
             properties:
-              foo:
-                description: foo is an example field of Herd. Edit herd_types.go to
-                  remove/update
+              repositories:
+                description: |-
+                  repositories are the repositories this herd spans - one, several, or a
+                  monorepo. A herd crosses repository boundaries by construction, which is
+                  why there is no separate grouping kind.
+                items:
+                  description: RepositoryRef declares one repository a Herd spans.
+                  properties:
+                    revision:
+                      description: |-
+                        revision is the branch, tag or commit to track. Naming it is
+                        deliberately encouraged rather than defaulted: this project has already
+                        been bitten once by a clone with no ref, which took a default branch and
+                        produced a tree missing the very code it was meant to build. Empty means
+                        the repository's default branch, which is a choice, not an absence.
+                      type: string
+                    secretRef:
+                      description: |-
+                        secretRef names a Secret in the Herd's own namespace holding the
+                        credential used to clone this repository. Omit it for a public one.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    url:
+                      description: url is the clone URL of the repository.
+                      minLength: 1
+                      type: string
+                  required:
+                  - url
+                  type: object
+                minItems: 1
+                type: array
+              targetNamespace:
+                description: |-
+                  targetNamespace is where the instance's components run. Empty means the
+                  Herd's own namespace.
                 type: string
+            required:
+            - repositories
             type: object
           status:
             description: status defines the observed state of Herd

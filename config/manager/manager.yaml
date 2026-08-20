@@ -98,5 +98,13 @@ spec:
             memory: 64Mi
         volumeMounts: []
       volumes: []
+      # Harbor's henia project is private - an anonymous manifest GET returns
+      # 401 - so the pull needs a credential. Without this the Deployment only
+      # runs while the image happens to be in the node's containerd store;
+      # image GC, a node rebuild or any new tag would fail to start.
+      # The Secret is created out-of-band and never committed, like the other
+      # four this change relies on.
+      imagePullSecrets:
+        - name: harbor-pull
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

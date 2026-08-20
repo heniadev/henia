@@ -38,9 +38,13 @@ Two parameters, both explicit:
   the **short commit SHA** of the revision being built, so a running Deployment
   names exactly one build rather than a floating tag that changes underneath it.
 
+The tag is **not** yours to supply. Pass the repository without one; the clone
+step derives the tag from the revision it actually cloned and publishes it as a
+Pipeline result. A short SHA computed from your own working copy can name a
+commit the pipeline never built.
+
 ```sh
 REV=feature/cluster-substrate                     # or main, once merged
-SHA=$(git rev-parse --short "$REV")
 
 kubectl create -f - <<YAML
 apiVersion: tekton.dev/v1
@@ -59,12 +63,19 @@ spec:
     - name: revision
       value: ${REV}
     - name: image
-      value: harbor-core.harbor.svc/henia/henia-operator:${SHA}
+      value: harbor-core.harbor.svc/henia/henia-operator
   workspaces:
     - name: source
       persistentVolumeClaim:
         claimName: henia-build-workspace
 YAML
+```
+
+Read back what was built:
+
+```sh
+kubectl -n default get pipelinerun <name> \
+  -o jsonpath='{.status.results[?(@.name=="image")].value}'
 ```
 
 Watch it:
@@ -73,6 +84,11 @@ Watch it:
 kubectl -n default get pipelinerun -w
 kubectl -n default logs -l tekton.dev/pipelineRun=<name> --all-containers -f
 ```
+
+Each PipelineRun gets its own tree under the shared workspace, named after the
+run (`$(context.pipelineRun.name)`, passed by the Pipeline). Trees older than
+three days are pruned at the start of each clone, so the PVC does not grow
+without bound and a concurrent run is never the one pruned.
 
 The registry hostname is Harbor's **in-cluster Service**
 (`harbor-core.harbor.svc`), not the public name — see
@@ -84,9 +100,15 @@ The registry hostname is Harbor's **in-cluster Service**
 `devcontainer-verify.yaml` builds `devcontainer/Dockerfile` the same way and
 then runs the result with the cloned repository on the workspace mount.
 
+The run is **two Tasks**, not one Task with three steps, and the split is
+load-bearing: Tekton compiles a Task's steps into a single pod and the kubelet
+pulls every step image at pod creation, so a step whose image is the one a later
+step builds would deadlock on `ImagePullBackOff` before the build ran. The
+`start` Task carries `runAfter: [build]`, so its pod is created only once the
+image is in Harbor.
+
 ```sh
 REV=feature/cluster-substrate
-SHA=$(git rev-parse --short "$REV")
 
 kubectl apply -f deploy/tekton/devcontainer-verify.yaml
 kubectl create -f - <<YAML
@@ -106,7 +128,7 @@ spec:
     - name: revision
       value: ${REV}
     - name: image
-      value: harbor-core.harbor.svc/henia/devcontainer:${SHA}
+      value: harbor-core.harbor.svc/henia/devcontainer
   workspaces:
     - name: source
       persistentVolumeClaim:
@@ -132,7 +154,8 @@ The image tag is the one value the deployment consumes. Bump it in the tracked
 kustomization so the repository names the build that is actually running:
 
 ```sh
-kustomize edit set image controller=harbor-core.harbor.svc/henia/henia-operator:${SHA}   # in config/manager
+kustomize edit set image controller="$(kubectl -n default get pipelinerun <name> \
+  -o jsonpath='{.status.results[?(@.name=="image")].value}')"    # in config/manager
 kustomize build config/default | kubectl apply -f -
 ```
 

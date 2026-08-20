@@ -6,4 +6,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: herd-sample
 spec:
-  # TODO(user): Add fields here
+  repositories:
+    - url: https://git.tobiko.kondi.net/kondi/henia.git
+      revision: main
