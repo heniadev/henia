@@ -643,9 +643,9 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 1.3 `go version` reports 1.26.x inside the rebuilt container
-- [ ] 1.4 `kubebuilder version` reports v4.15.0
-- [ ] 1.5 `kubectl`, `tea`, `kustomize` and `sops` still resolve
+- [x] 1.3 `go version` reports 1.26.x inside the rebuilt container — 34f444a
+- [x] 1.4 `kubebuilder version` reports v4.15.0 — 34f444a
+- [x] 1.5 `kubectl`, `tea`, `kustomize` and `sops` still resolve — 34f444a
 - [ ] 1.6 The rebuilt image builds from a clean context and the container starts with the repository mounted
 
 ### Phase 2: Operator scaffold
@@ -661,7 +661,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 2.7 Nothing under `context/`, `infra/`, `devcontainer/`, `docs/` or `content/` was overwritten
+- [x] 2.7 Nothing under `context/`, `infra/`, `devcontainer/`, `docs/` or `content/` was overwritten — 2604250
 
 ### Phase 3: Harbor on tachiko
 
@@ -687,7 +687,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 4.4 The installed track is confirmed as current, not the operator's LTS line
+- [x] 4.4 The installed track is confirmed as current, not the operator's LTS line — 0e3ee4a
 
 ### Phase 5: Build pipeline
 
@@ -700,7 +700,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 5.5 The pipeline definition is reviewed for credential handling
+- [x] 5.5 The pipeline definition is reviewed for credential handling
 
 ### Phase 6: Deploy the operator
 
