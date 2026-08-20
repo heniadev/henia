@@ -10,15 +10,17 @@ not this change.
 
 ## Prerequisites (created out-of-band, never committed)
 
-Both Secrets live in `default` and are referenced by name only:
+Three Secrets live in `default` and are referenced by name only:
 
 | Secret | Type | Used by | Contents |
 | --- | --- | --- | --- |
 | `gitea-auth` | `Opaque` | clone step, mounted at `/gitea` | keys `username`, `password` — a Gitea identity with **read** access to `kondi/henia`. The password is stored **percent-encoded**; see below |
 | `harbor-push` | `kubernetes.io/dockerconfigjson` | build step, mounted at `/harbor` | the Harbor **robot** credential holding push rights on the `henia` project only |
+| `harbor-pull` | `kubernetes.io/dockerconfigjson` | the `tekton-build` ServiceAccount, to pull step images from Harbor | a **pull-only** Harbor robot on the `henia` project. Required since the verify pipeline gained a step whose image comes from Harbor; without it that step ends in `ImagePullBackOff`. The same Secret is needed in `henia-system` for the operator — see `infra/tachiko/README.md` |
 
-Neither is admin: the clone identity cannot write to the repository, and the
-push identity cannot touch any Harbor project but `henia`.
+None is admin: the clone identity cannot write to the repository, the push
+identity cannot touch any Harbor project but `henia`, and the pull identity
+cannot write to it at all.
 
 **The Gitea password is percent-encoded in the Secret.** This is not obvious and
 it has already cost one failed pipeline run: the original clone step interpolated

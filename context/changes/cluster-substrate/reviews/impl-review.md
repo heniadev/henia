@@ -5,8 +5,8 @@
 - **Scope**: whole plan — all 8 phases, 43 of 43 Progress items checked. Third round; round 1 at `git show dfc64fc:…/reviews/impl-review.md`, round 2 at `git show d0b57ac:…/reviews/impl-review.md`
 - **Date**: 2026-08-20
 - **Diff basis**: Progress SHAs. All 28 commits in `main..HEAD` carry the change's `<type>(cluster-substrate):` subject convention and the merge-base range coincides exactly with the change. This round concentrates on `d0b57ac..HEAD` — `7c1d139`, `14ba22b`, `d4f7409` — plus an exhaustive audit of `hack/verify.sh`, which produced a false-PASS finding in two of the three rounds.
-- **Verdict**: REWORK REQUIRED
-- **Findings**: 1 critical, 5 warnings, 4 observations
+- **Verdict**: NEEDS ATTENTION — as filed, REWORK REQUIRED on F1; F1 was rejected in triage as nitpicking and the objection was accepted, which drops Success Criteria to WARNING and the overall verdict with it
+- **Findings**: 1 critical, 5 warnings, 4 observations (the critical was rejected in triage)
 
 ## Verdicts
 
@@ -17,7 +17,7 @@
 | Safety & Quality | WARNING |
 | Architecture | PASS |
 | Pattern Consistency | WARNING |
-| Success Criteria | FAIL |
+| Success Criteria | WARNING |
 
 Round 2's ten findings are closed and verified, most of them on the cluster rather than on the page: the CEL guard rejects `secretRef: {}` on the live CRD, the read-only workspace and the non-root clone step both ran green, `tekton-build` pulls with the pull robot, and the operator runs an image its own pipeline derived a tag for. Every one of the plan's 23 Changes Required items has an artifact; no exclusion is violated.
 
@@ -60,7 +60,9 @@ Nothing is broken at runtime: the header is a comment. What is broken is the cri
 - *Confidence*: High that it is safe; low that it is honest.
 - *Blind spot*: None material.
 
-**Decision**: PENDING
+**Decision**: REJECTED — the operator's call: nitpicking. On review the objection is right and the severity was wrong. The criterion's *intent* — that generated artefacts stay in step with the types — holds: running the same regeneration twice produces no diff, which is what "idempotent" means here. What diverges is a one-time year stamp in a comment header, an artefact of how the file was first generated when `make` was unavailable in the image. Grading a cosmetic difference CRITICAL, and letting it carry the whole verdict, over-weighted the literal wording of the criterion against its purpose.
+
+**Verdict consequence**: with F1 rejected, nothing supports a Success Criteria FAIL — F2 is the only remaining accepted finding in that dimension and it is a WARNING. The dimension drops to WARNING and the overall verdict becomes **NEEDS ATTENTION**, recorded in the header.
 
 ### F2 — Round 2's 3.2 fix reopened an empty-input false PASS, and split a sibling pair
 
@@ -79,7 +81,7 @@ The same rewrite also left 3.2 on `curl -fsS` while its sibling 3.6 deliberately
 - *Confidence*: High — both behaviours were reproduced.
 - *Blind spot*: I did not check whether Harbor's health endpoint can legitimately return 2xx with an empty body under any condition.
 
-**Decision**: PENDING
+**Decision**: FIXED — the non-empty guard is back and 3.2 no longer uses `-f`, so it agrees with its sibling 3.6. All four paths were exercised against stub servers: a 200 with an empty body FAILs ("nothing was inspected"), a 503 FAILs with the status, an unreachable host SKIPs, and the real Harbor PASSes.
 
 ### F3 — Phase 7 never got the "unreachable is not failed" treatment
 
@@ -100,7 +102,7 @@ It errs toward alarm, never toward false green. But a suite that cries wolf when
 - *Confidence*: High.
 - *Blind spot*: The distinction rests on `json.loads` throwing; a valid JSON error document from a proxy would parse and yield zero targets, which reads as FAIL.
 
-**Decision**: PENDING
+**Decision**: REJECTED — nitpicking, per the operator. Reasonable: the behaviour errs toward alarm and never toward a false green, so the cost is a noisy red line when Prometheus is down rather than an unnoticed defect. The "third round for this class" framing made a reporting-polish item look like a recurring failure; the recurrences that mattered — silent omission in round 1, FAIL-instead-of-SKIP masking real state in round 2 — were closed.
 
 ### F4 — The pipelines' own prerequisites omit the credential they now require
 
@@ -119,7 +121,7 @@ Someone standing the pipelines up on a fresh cluster from this README gets `Imag
 - *Confidence*: High.
 - *Blind spot*: None material.
 
-**Decision**: PENDING
+**Decision**: FIXED — the prerequisites table lists three Secrets now, with `harbor-pull`, its consumer, the `ImagePullBackOff` it prevents, and a pointer to `infra/tachiko/README.md` for recreating it. "Neither is admin" became "None is admin".
 
 ### F5 — The non-root clone step cannot prune the trees earlier runs left, and says nothing
 
@@ -146,7 +148,7 @@ Latent: the trees are about a day old and the prune only touches `-mtime +3`. Th
 - *Confidence*: Moderate — I have not tested `fsGroup` against `local-path` here.
 - *Blind spot*: Interaction with the read-only workspace on `devcontainer-start`.
 
-**Decision**: PENDING
+**Decision**: PARTIALLY FIXED — the repository half is done: the prune now loops and reports each directory it could not remove, with the owning uid, instead of `2>/dev/null || true`. The backlog half — deleting the root-owned trees `henia-build-1` and `henia-build-2` left on the workspace PVC — needs cluster access and is queued in `follow-ups/review-fixes.md`. It is not urgent: those trees are about a day old and the prune only touches `-mtime +3`.
 
 ### F6 — Three plan sentences were superseded by better implementations and never amended
 
@@ -165,7 +167,7 @@ Each is a better implementation than the sentence it contradicts. The defect is 
 
 **Fix ⭐** — add amendment notes in the same shape as the auto-deploy one.
 
-**Decision**: PENDING
+**Decision**: FIXED — three amendment notes added, in the same shape as the auto-deploy one: P5.2 records that both credentials are Task-level Secret volumes and why the ServiceAccount's `secrets:` list was removed; P5.3 records that the tag is a Pipeline result rather than a parameter, and why a caller-supplied tag is the failure this change exists to prevent; P7.2 records that phase 7's own escape clause was taken, so the contract sentence is not read as unmet.
 
 ### F7 — The telemetry path has not been re-verified since the operator was redeployed
 
@@ -180,7 +182,7 @@ The harness cannot close the gap: 7.1–7.4 SKIP without `PROM_AUTH`, and the cr
 
 F3's fix would make this louder but not closable. Reaching Prometheus at its ClusterIP from the host closes it without the credential, as was done after `da23a3f`.
 
-**Decision**: PENDING
+**Decision**: CONFIRMED by the operator — the Prometheus UI shows the `henia-operator` target up after the redeploy, so endpoint discovery did follow the new pod IP and FR-270 rests on an observation again rather than an inference. The harness still cannot close this without `PROM_AUTH`; querying Prometheus at its ClusterIP from the host remains the credential-free route.
 
 ### F8 — Five residual `verify.sh` weaknesses, none a false green
 
@@ -197,7 +199,7 @@ F3's fix would make this louder but not closable. Reaching Prometheus at its Clu
 - **5.1 counts any succeeded PipelineRun**, not the operator's. Round 2 chose to run the pipeline rather than tighten the check; the looseness survives.
 - **`have_cluster` is true for a reachable API server with no RBAC**, which would make every phase FAIL rather than SKIP.
 
-**Decision**: PENDING
+**Decision**: PARTIALLY FIXED — the two that mis-report are fixed. 2.3 uses `git status --porcelain` instead of `git diff --quiet`, so an artifact regeneration *creates* is no longer invisible. 5.1 now selects `pipelineRef.name == henia-operator` rather than counting any run — the looseness that let the devcontainer pipeline answer for the operator pipeline in round 2; it reports 3 succeeded operator runs. Left as recorded observations: 1.1's dead error branch (its FAIL is correct, only the reason string is wrong), 1.2's duplicated version pins, and `have_cluster` being true for a reachable-but-unauthorized API server — each needs a redesign disproportionate to a failure mode that never yields a false green.
 
 ### F9 — 5.3 blames the assertion when it cannot parse the file
 
@@ -208,7 +210,7 @@ F3's fix would make this louder but not closable. Reaching Prometheus at its Clu
 
 **Detail**: The Python probe exits 1 both when it finds `privileged: true` and when it throws on an unparseable file. The `else` branch reports "no privileged: true in the pipeline definition" either way, so a syntax error in a pipeline YAML is reported as a security assertion failing. Same shape as F1 — the check cannot distinguish "the answer is no" from "I could not ask" — and the fix is the same one applied to 5.5 in round 2.
 
-**Decision**: PENDING
+**Decision**: FIXED — the probe exits 2 on a parse error and 5.3 reports it as "could not parse" rather than as the security assertion failing. Proved by appending invalid YAML to a pipeline file: `FAIL 5.3 … could not parse deploy/tekton/: while scanning for the next token`, then restored.
 
 ### F10 — A comment in `devcontainer-verify.yaml` refers to its own file in the third person
 
@@ -219,7 +221,7 @@ F3's fix would make this louder but not closable. Reaching Prometheus at its Clu
 
 **Detail**: The clone step's comment was copied verbatim from the sibling file and still reads "while `devcontainer-verify.yaml` argues explicitly that…" — inside `devcontainer-verify.yaml`. Cosmetic. Recorded because the two clone steps being otherwise byte-identical is the right outcome and worth keeping visible.
 
-**Decision**: PENDING
+**Decision**: FIXED — the comment now refers to "the start Task below" instead of naming its own file in the third person.
 
 ## Automated Verification (re-run during review)
 

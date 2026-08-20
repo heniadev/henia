@@ -423,10 +423,25 @@ Intent: give the pipeline the two identities it needs, no more. Contract: a
 Gitea read credential for clone and a Harbor push credential, both as Secrets
 created out-of-band, referenced by ServiceAccount, never committed.
 
+> **Amended after implementation review (round 3, F6).** Both credentials are
+> delivered as Task-level Secret volumes, not through the ServiceAccount. The
+> ServiceAccount's `secrets:` list was removed deliberately in round 2: Tekton's
+> creds-init only consumes SA secrets annotated `tekton.dev/git-*`, so the entry
+> did nothing, and had that annotation ever been added it would have written a
+> competing `.git-credentials` into every step. The SA now carries only
+> `imagePullSecrets`. Two identities, no more, as the intent requires.
+
 #### 3. Manual run procedure
 
 Intent: make the build repeatable without a webhook. Contract: a documented
 `PipelineRun` invocation with the image tag as a parameter.
+
+> **Amended after implementation review (round 1, F9).** The tag is a Pipeline
+> *result*, not a parameter. The `image` parameter names the repository without
+> one, and the clone step derives the tag from the revision it actually cloned.
+> A tag passed in is computed from the caller's working copy, which can name a
+> commit the pipeline never built - the failure this change exists to prevent
+> one layer down.
 
 ### Success Criteria:
 
@@ -522,6 +537,14 @@ Intent: use the mechanism the installed Prometheus actually has. Contract: the
 metrics Service carries `prometheus.io/scrape` annotations so the plain chart's
 `kubernetes-service-endpoints` job discovers it — there are no ServiceMonitor
 CRDs on this cluster.
+
+> **Amended after implementation review (round 3, F6).** A dedicated static
+> scrape job is used instead of the annotations. The annotation-driven
+> `kubernetes-service-endpoints` job cannot attach a per-target bearer token,
+> and the metrics endpoint keeps its authn/authz - so the two are incompatible.
+> Change #1 above already authorises this ("add a static scrape config for this
+> one target rather than removing the protection"); this note records that the
+> escape clause was taken, so the contract sentence is not read as unmet.
 
 ### Success Criteria:
 

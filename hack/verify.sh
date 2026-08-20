@@ -137,7 +137,7 @@ for c in bin/controller-gen bin/controller-gen-v*; do
 done
 if [[ -z "$CG" ]]; then
   skip "2.3" "regeneration produces no diff" "no controller-gen in bin/ — run 'make controller-gen'"
-elif ! git diff --quiet -- api config 2>/dev/null; then
+elif [[ -n "$(git status --porcelain -- api config 2>/dev/null)" ]]; then
   skip "2.3" "regeneration produces no diff" "api/ or config/ already dirty; commit or stash first"
 else
   # controller-gen's exit status is a result, not noise. Discarded, a binary
@@ -155,7 +155,10 @@ else
   fi
   if [[ -n "$cg_err" ]]; then
     fail "2.3" "regeneration produces no diff" "$CG: $cg_err"
-  elif git diff --quiet -- api config; then
+  elif [[ -z "$(git status --porcelain -- api config)" ]]; then
+    # status, not diff: `git diff` compares tracked content only, so an
+    # artifact regeneration CREATES - a new CRD file for a new type, a new
+    # zz_generated - would leave this green. Round 3, F8.
     pass "2.3" "regeneration produces no diff"
   else
     fail "2.3" "regeneration produces no diff" \
@@ -236,15 +239,24 @@ else
   skip "3.1" "all Harbor pods Ready" "no cluster access"
 fi
 
-# Unreachable is not unhealthy. Round 2, F7.
-if health="$(curl -fsS --max-time 15 "$HARBOR_URL/api/v2.0/health" 2>/dev/null)"; then
-  if grep -q '"status":"unhealthy"' <<<"$health"; then
-    fail "3.2" "Harbor reports every component healthy" "${health:0:120}"
-  else
-    pass "3.2" "Harbor reports every component healthy"
-  fi
-else
+# Unreachable is not unhealthy - but nor is an empty answer healthy. Round 2's
+# fix dropped the non-empty guard the original had, so a 200 with no body (an
+# ingress answering for a dead Harbor) passed having inspected nothing; and it
+# kept -f, which collapses a 5xx into "unreachable" forever, while the sibling
+# check 3.6 below deliberately dropped -f for exactly that reason. Round 3, F2.
+h_code="$(curl -sS --max-time 15 -o /tmp/harbor-health.$$ -w '%{http_code}' \
+          "$HARBOR_URL/api/v2.0/health" 2>/dev/null)" || h_code=""
+health="$(cat /tmp/harbor-health.$$ 2>/dev/null)"; rm -f /tmp/harbor-health.$$
+if [[ -z "$h_code" || "$h_code" == "000" ]]; then
   skip "3.2" "Harbor reports every component healthy" "$HARBOR_URL is unreachable"
+elif [[ "$h_code" != "200" ]]; then
+  fail "3.2" "Harbor reports every component healthy" "HTTP $h_code from the health endpoint"
+elif [[ -z "${health//[[:space:]]/}" ]]; then
+  fail "3.2" "Harbor reports every component healthy" "HTTP 200 with an empty body; nothing was inspected"
+elif grep -q '"status":"unhealthy"' <<<"$health"; then
+  fail "3.2" "Harbor reports every component healthy" "${health:0:120}"
+else
+  pass "3.2" "Harbor reports every component healthy"
 fi
 
 skip "3.3" "robot account authenticates"  "needs the robot credential (/root/harbor-robot.txt on tachiko)"
@@ -309,12 +321,16 @@ fi
 section "Phase 5 — build pipeline"
 
 if [[ "$have_cluster" == 1 ]]; then
+  # Named, not counted. Counting any succeeded PipelineRun let the devcontainer
+  # pipeline answer for the operator pipeline - which is how a rewritten and
+  # never-run operator build passed this criterion in round 2. Round 3, F8.
   succeeded="$($KUBECTL -n default get pipelinerun \
-               -o jsonpath='{range .items[*]}{.status.conditions[0].reason}{"\n"}{end}' 2>/dev/null \
+               -o jsonpath='{range .items[?(@.spec.pipelineRef.name=="henia-operator")]}{.status.conditions[0].reason}{"\n"}{end}' 2>/dev/null \
                | grep -c '^Succeeded$')"
   [[ "${succeeded:-0}" -ge 1 ]] \
-    && pass "5.1" "a PipelineRun has completed end to end ($succeeded succeeded)" \
-    || fail "5.1" "a PipelineRun has completed end to end"
+    && pass "5.1" "a henia-operator PipelineRun has completed end to end ($succeeded succeeded)" \
+    || fail "5.1" "a henia-operator PipelineRun has completed end to end" \
+           "succeeded runs of the operator pipeline: ${succeeded:-0}"
 else
   skip "5.1" "a PipelineRun has completed end to end" "no cluster access"
 fi
@@ -334,13 +350,21 @@ def walk(n):
     return False
 # Every pipeline file, not just the first. devcontainer-verify.yaml gained a
 # third Task and was never scanned by this guard. Round 2, F7.
-docs = [d for f in sys.argv[1:] for d in yaml.safe_load_all(open(f)) if d]
+try:
+    docs = [d for f in sys.argv[1:] for d in yaml.safe_load_all(open(f)) if d]
+except Exception as e:
+    print(e, file=sys.stderr)
+    sys.exit(2)   # could not ask, as distinct from the answer being no
 sys.exit(1 if any(walk(d) for d in docs) else 0)
-' deploy/tekton/*.yaml; then
+' deploy/tekton/*.yaml 2>/tmp/privcheck.$$; then
   pass "5.3" "no privileged: true anywhere in the pipeline definition"
+elif [[ $? == 2 ]]; then
+  fail "5.3" "no privileged: true in the pipeline definition" \
+       "could not parse deploy/tekton/: $(head -1 /tmp/privcheck.$$)"
 else
   fail "5.3" "no privileged: true in the pipeline definition"
 fi
+rm -f /tmp/privcheck.$$
 
 skip "5.4" "built image executes in a throwaway pod" "needs write access to the cluster"
 

@@ -71,8 +71,8 @@ spec:
     - name: clone
       image: alpine/git:2.49.0
       # The step that handles the git credential was the only one in either
-      # pipeline running as root, while devcontainer-verify.yaml argues
-      # explicitly that no step gets a weaker posture than the build step.
+      # pipeline running as root, while the start Task below argues explicitly
+      # that no step gets a weaker posture than the build step.
       # Round 2, F10. HOME must move with it: the image leaves HOME unset, so
       # the kubelet default is /root, which uid 1000 cannot write - and this
       # step writes both $HOME/.git-credentials and $HOME/.gitconfig.
@@ -121,8 +121,16 @@ spec:
         # the workspace does not grow without bound; three days is longer than
         # any run, so a concurrent run is never the one pruned.
         DEST="$(workspaces.source.path)/$(params.runId)/repo"
-        find "$(workspaces.source.path)" -mindepth 1 -maxdepth 1 -type d \
-             -mtime +3 -exec rm -rf {} + 2>/dev/null || true
+        # Report what could not be pruned rather than swallowing it. Trees left
+        # by runs from before this step dropped to uid 1000 are root-owned, and
+        # rm -rf must write into a directory to unlink its contents - so they
+        # survive, silently, while the README says pruning happens. Round 3, F5.
+        for old in $(find "$(workspaces.source.path)" -mindepth 1 -maxdepth 1 \
+                          -type d -mtime +3 2>/dev/null); do
+          if ! rm -rf "$old" 2>/dev/null; then
+            echo "WARNING: could not prune $old (owner uid $(stat -c %u "$old" 2>/dev/null)); workspace will keep growing" >&2
+          fi
+        done
         rm -rf "$DEST"
         mkdir -p "$(dirname "$DEST")"
         git clone --depth 1 --branch "$(params.revision)" \
