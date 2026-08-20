@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     jq \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @anthropic-ai/claude-code
@@ -201,6 +202,54 @@ RUN KSOPS_VERSION="v4.5.1" \
     && chmod -R a+rX "${XDG_CONFIG_HOME}" \
     && chmod 0777 "${XDG_CONFIG_HOME}" \
     && rm -f /tmp/ksops.tar.gz /tmp/ksops.sha256
+
+# Go: the toolchain for Henia's own operator (context/changes/cluster-substrate).
+# This image was deliberately toolchain-free — a control-plane container, not a
+# build one — so this is a considered change, not a convenience: `kubebuilder
+# create api` is re-run every time the API evolves, and doing that through a
+# throwaway pod on the cluster would make routine work a ceremony.
+#
+# Pinned to the 1.26 line because kubebuilder v4.15.0 targets Go 1.26 and
+# Kubernetes 1.36 (context/foundation/tech-stack.md). Version + per-arch sha256
+# from go.dev's release index, droast/kubeconform-style.
+RUN GO_VERSION="1.26.7" \
+    && case "$(dpkg --print-architecture)" in \
+         amd64) GO_ARCH="amd64"; GO_SHA="ffb5f8de10c62550dfddab66b36b57030721e0a44a3218e9e1181d7b59f121ca" ;; \
+         arm64) GO_ARCH="arm64"; GO_SHA="5a4ec883379d51ee9ce1040d5e87f8d35e20387574dd8c947feb01eabc3c1b37" ;; \
+         *) echo "unsupported architecture for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSLo /tmp/go.tar.gz \
+    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" \
+    && echo "${GO_SHA}  /tmp/go.tar.gz" > /tmp/go.sha256 \
+    && sha256sum -c /tmp/go.sha256 \
+    && tar -xzf /tmp/go.tar.gz -C /usr/local \
+    && rm /tmp/go.tar.gz /tmp/go.sha256
+
+# GOPATH/GOCACHE live under /home/agent, the persisted named volume — never in
+# /workspace, or module downloads and build artefacts would land in the repo and
+# show up as untracked files in every `git status`. Same volume-shadowing
+# constraint as PRE_COMMIT_HOME below: these cannot be pre-warmed at build time.
+ENV PATH="/usr/local/go/bin:/home/agent/go/bin:${PATH}"
+ENV GOPATH=/home/agent/go
+ENV GOCACHE=/home/agent/.cache/go-build
+
+# kubebuilder: scaffolds and regenerates the operator project (PROJECT, api/,
+# internal/controller/, config/). Pinned to v4.15.0 — the version the stack
+# hand-off records, targeting Kubernetes 1.36 with controller-runtime v0.24.1.
+# Version + per-arch sha256 from upstream's published checksums.txt.
+RUN KUBEBUILDER_VERSION="v4.15.0" \
+    && case "$(dpkg --print-architecture)" in \
+         amd64) KB_ARCH="amd64"; KB_SHA="9632ba818c35e10d9664f19090972ee5d667bdffbf4b83c34e8374c5e846afa2" ;; \
+         arm64) KB_ARCH="arm64"; KB_SHA="bd99723fc106502f64a3541b9c5b7079bc68961a76df4f465893e311b594d295" ;; \
+         *) echo "unsupported architecture for kubebuilder: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSLo /tmp/kubebuilder \
+    "https://github.com/kubernetes-sigs/kubebuilder/releases/download/${KUBEBUILDER_VERSION}/kubebuilder_linux_${KB_ARCH}" \
+    && echo "${KB_SHA}  /tmp/kubebuilder" > /tmp/kubebuilder.sha256 \
+    && sha256sum -c /tmp/kubebuilder.sha256 \
+    && mv /tmp/kubebuilder /usr/local/bin/kubebuilder \
+    && rm -f /tmp/kubebuilder.sha256 \
+    && chmod +x /usr/local/bin/kubebuilder
 
 # Playwright/Chromium runtime libs: the devcontainer runs as a non-root,
 # sudo-less user after entrypoint.sh drops privileges, so `npx playwright

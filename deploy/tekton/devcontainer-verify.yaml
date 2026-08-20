@@ -1,0 +1,317 @@
+# Verification build for the devcontainer image (cluster-substrate criterion 1.6).
+#
+# The criterion reads "the rebuilt image builds from a clean context and the
+# container starts with the repository mounted", and it was written as a manual
+# check for a good reason: the executor runs INSIDE the container being rebuilt
+# and has no container build tooling. That reason does not apply to a pipeline.
+#
+# Two things this does better than a local `docker build --no-cache`:
+#
+#   Clean by construction. A fresh PVC and a fresh clone are the context; a
+#   BuildKit pod has no layer cache to begin with. Nothing depends on anyone
+#   remembering the flag.
+#
+#   No credentials in the context. `docker build devcontainer/` on a workstation
+#   sends the WHOLE directory to the daemon - including devcontainer/creds.yaml
+#   and devcontainer/kubeconfig.yaml, both gitignored precisely because they hold
+#   secrets. A clone has neither, so the pipeline builds the context the image is
+#   actually supposed to have.
+#
+# What it does NOT verify, and no unprivileged pipeline can: run.sh's runtime
+# path - docker run with bind mounts, a named volume, --cap-add NET_ADMIN/
+# NET_RAW/SETUID/SETGID, the in-container firewall and the gosu privilege drop.
+# Reproducing that needs docker-in-docker or a privileged pod, which criterion
+# 5.3 forbids. The `devcontainer-start` Task below runs the built image with
+# the workspace mounted, which demonstrates that the image starts and sees a
+# mounted repository; it does not exercise run.sh. That distinction is the honest limit
+# of this pipeline, and it is why 1.6 is not simply reclassified as automated.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: devcontainer-verify-workspace
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: devcontainer-verify
+  namespace: default
+spec:
+  params:
+    - name: revision
+      type: string
+      description: Git revision to build. Not defaulted, for the reason given in henia-operator-build.yaml.
+    - name: image
+      type: string
+      description: >-
+        Image repository WITHOUT a tag. The tag is derived from the revision the
+        pipeline actually cloned, not supplied by the caller: a caller computing
+        the short SHA from their own working copy tags the image with a commit
+        the pipeline never built. Review finding F9.
+    - name: runId
+      type: string
+      description: >-
+        Identifier of the run, used to give each PipelineRun its own tree on
+        the shared workspace. The Pipeline passes $(context.pipelineRun.name).
+  results:
+    - name: commit
+      description: Short commit SHA of the revision actually cloned.
+    - name: image
+      description: Fully qualified image reference, including the derived tag.
+  workspaces:
+    - name: source
+  steps:
+    - name: clone
+      image: alpine/git:2.49.0
+      # The step that handles the git credential was the only one in either
+      # pipeline running as root, while the start Task below argues explicitly
+      # that no step gets a weaker posture than the build step.
+      # Round 2, F10. HOME must move with it: the image leaves HOME unset, so
+      # the kubelet default is /root, which uid 1000 cannot write - and this
+      # step writes both $HOME/.git-credentials and $HOME/.gitconfig.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      env:
+        - name: HOME
+          value: /tmp
+      script: |
+        #!/bin/sh
+        set -eu
+        # The credential never enters the URL. Interpolating it into
+        # https://user:pass@host put it in git's argv (readable through /proc
+        # by anything in this pod), in git's own error messages on failure, and
+        # persisted it as remote.origin.url in .git/config on the node's shared
+        # PVC. Review finding F6.
+        #
+        # git's `store` helper rather than GIT_ASKPASS, and the reason matters:
+        # the password in `gitea-auth` is stored PERCENT-ENCODED. The inline URL
+        # worked only because git decodes userinfo, so an askpass helper - which
+        # hands the value over literally - authenticated with the wrong string
+        # and failed. The store helper parses each line as a URL and decodes it
+        # the same way, so it works with the secret exactly as it is stored.
+        # The credentials file lives in this pod's own filesystem and dies with
+        # it; it never reaches the shared workspace.
+        # Subshell, so the restrictive umask dies with the file it is for. Left
+        # to leak, it also applied to the Tekton result files written at the end
+        # of this step, which the rootless build step then could not read -
+        # "cat: can't open '/tekton/results/image': Permission denied".
+        ( umask 077
+          printf 'https://%s:%s@git.tobiko.kondi.net\n' \
+            "$(cat /gitea/username)" "$(cat /gitea/password)" > "$HOME/.git-credentials" )
+        git config --global credential.helper store
+        export GIT_TERMINAL_PROMPT=0
+
+        # One tree per PipelineRun. A single fixed path meant a second run's
+        # rm -rf deleted the first run's source mid-build, and the first run
+        # then failed with a corrupted-tree error that read like a Dockerfile
+        # fault. Review finding F7. Trees older than three days are pruned so
+        # the workspace does not grow without bound; three days is longer than
+        # any run, so a concurrent run is never the one pruned.
+        DEST="$(workspaces.source.path)/$(params.runId)/repo"
+        # Report what could not be pruned rather than swallowing it. Trees left
+        # by runs from before this step dropped to uid 1000 are root-owned, and
+        # rm -rf must write into a directory to unlink its contents - so they
+        # survive, silently, while the README says pruning happens. Round 3, F5.
+        for old in $(find "$(workspaces.source.path)" -mindepth 1 -maxdepth 1 \
+                          -type d -mtime +3 2>/dev/null); do
+          if ! rm -rf "$old" 2>/dev/null; then
+            echo "WARNING: could not prune $old (owner uid $(stat -c %u "$old" 2>/dev/null)); workspace will keep growing" >&2
+          fi
+        done
+        rm -rf "$DEST"
+        mkdir -p "$(dirname "$DEST")"
+        git clone --depth 1 --branch "$(params.revision)" \
+          "https://git.tobiko.kondi.net/kondi/henia.git" "$DEST"
+        cd "$DEST"
+        SHA="$(git rev-parse --short HEAD)"
+        echo "cloned $(params.revision) at $SHA"
+        printf '%s' "$SHA" > "$(results.commit.path)"
+        printf '%s:%s' "$(params.image)" "$SHA" > "$(results.image.path)"
+        # The context is what git tracks, and nothing else. Say so out loud:
+        # the absence of these two is a property being verified, not an accident.
+        for f in creds.yaml kubeconfig.yaml; do
+          if [ -e "devcontainer/$f" ]; then
+            echo "FAIL: devcontainer/$f is in the build context" >&2
+            exit 1
+          fi
+        done
+        echo "context carries no gitignored credential files"
+      volumeMounts:
+        - name: gitea
+          mountPath: /gitea
+          readOnly: true
+    - name: build-and-push
+      image: moby/buildkit:v0.32.2-rootless
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: Unconfined
+        appArmorProfile:
+          type: Unconfined
+      env:
+        - name: BUILDKITD_FLAGS
+          value: --oci-worker-no-process-sandbox
+        - name: DOCKER_CONFIG
+          value: /home/user/.docker
+      script: |
+        #!/bin/sh
+        set -eu
+        mkdir -p /home/user/.docker
+        cp /harbor/.dockerconfigjson /home/user/.docker/config.json
+        IMAGE="$(cat "$(results.image.path)")"
+        echo "building $IMAGE"
+        cd "$(workspaces.source.path)/$(params.runId)/repo/devcontainer"
+        buildctl-daemonless.sh build \
+          --frontend dockerfile.v0 \
+          --local context=. \
+          --local dockerfile=. \
+          --output type=image,name="$IMAGE",push=true,registry.insecure=true
+      volumeMounts:
+        - name: harbor
+          mountPath: /harbor
+          readOnly: true
+  volumes:
+    - name: gitea
+      secret:
+        secretName: gitea-auth
+    - name: harbor
+      secret:
+        secretName: harbor-push
+---
+# A SEPARATE Task, not a fourth step, and that is the whole point.
+#
+# Tekton compiles every step of a Task into containers of ONE pod, and the
+# kubelet pulls all of those images when the pod is created - before any step
+# script runs. A step whose image is the one a LATER step builds therefore
+# enters ImagePullBackOff at pod creation, and the build that would have
+# produced it never happens. The first version of this file did exactly that
+# and could never have completed a run; implementation review F3 caught it
+# before it ever ran.
+#
+# As its own Task with runAfter, this pod is created only once the build
+# TaskRun has finished and the image is in Harbor.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: devcontainer-start
+  namespace: default
+spec:
+  params:
+    - name: image
+      type: string
+      description: The image built by devcontainer-verify, to be started here.
+    - name: runId
+      type: string
+      description: >-
+        Identifier of the run, used to give each PipelineRun its own tree on
+        the shared workspace. The Pipeline passes $(context.pipelineRun.name).
+  workspaces:
+    # Read-only: this task inspects the tree, it does not build in it. The step
+    # runs a freshly built, unvetted image, and the workspace PVC persists
+    # across runs - without this it could modify another run's source. Review
+    # round 2, finding F4.
+    - name: source
+      readOnly: true
+  steps:
+    - name: start
+      # The step's container IS the freshly built image, with the cloned
+      # repository on the workspace mount - the closest an unprivileged
+      # pipeline gets to "the container starts with the repository mounted".
+      image: $(params.image)
+      # The sibling build step is pinned to uid/gid 1000; a just-built,
+      # unvetted image gets no weaker a posture. node:22-slim carries uid 1000.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        echo "arch: $(uname -m)"
+
+        # Every tool is a HARD assertion. The first version printed go and
+        # kubebuilder inside command substitutions, where set -e does not
+        # propagate the exit status - so an image with no Go toolchain printed
+        # a blank line and passed. The two tools phase 1 added were the only
+        # two the check could not fail on. Review finding F3.
+        for t in go kubebuilder kubectl tea kustomize sops make; do
+          command -v "$t" >/dev/null || { echo "FAIL: $t missing" >&2; exit 1; }
+        done
+
+        go version | grep -q 'go1\.26\.' \
+          || { echo "FAIL: go is $(go version), expected 1.26.x" >&2; exit 1; }
+        kubebuilder version | grep -q 'v4\.15\.0' \
+          || { echo "FAIL: kubebuilder is not v4.15.0" >&2; exit 1; }
+        echo "toolchain: $(go version), kubebuilder v4.15.0, all tools resolve"
+
+        test -d "$(workspaces.source.path)/$(params.runId)/repo/.git" \
+          || { echo "FAIL: repository not visible on the mount" >&2; exit 1; }
+        echo "repository: visible at $(workspaces.source.path)/$(params.runId)/repo"
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: devcontainer-verify
+  namespace: default
+spec:
+  params:
+    - name: revision
+      type: string
+    - name: image
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: image
+      description: The image reference actually built, tag included.
+      value: $(tasks.build.results.image)
+    - name: commit
+      description: Short commit SHA of the revision actually cloned.
+      value: $(tasks.build.results.commit)
+  tasks:
+    - name: build
+      taskRef:
+        name: devcontainer-verify
+      params:
+        - name: revision
+          value: $(params.revision)
+        - name: image
+          value: $(params.image)
+        - name: runId
+          value: $(context.pipelineRun.name)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: start
+      runAfter: [build]
+      taskRef:
+        name: devcontainer-start
+      params:
+        # The resolved reference from the build task, tag included - not the
+        # untagged repository the Pipeline was given.
+        - name: image
+          value: $(tasks.build.results.image)
+        - name: runId
+          value: $(context.pipelineRun.name)
+      workspaces:
+        - name: source
+          workspace: source

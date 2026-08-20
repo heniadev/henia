@@ -69,6 +69,14 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingressclasses"]
     verbs: ["get", "list", "watch"]
+  # Henia's own resources. The built-in `view` ClusterRole only aggregates CRDs
+  # labelled rbac.authorization.k8s.io/aggregate-to-view, and the Herd CRD is
+  # not, so without this grant FR-085's read-back would silently see nothing of
+  # the very framework it exists to observe — reads would succeed and return an
+  # empty list, which is the worst kind of failure.
+  - apiGroups: ["henia.dev"]
+    resources: ["herds", "herds/status"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

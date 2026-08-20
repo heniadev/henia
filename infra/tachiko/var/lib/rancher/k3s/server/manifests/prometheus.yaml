@@ -19,6 +19,46 @@ spec:
   targetNamespace: monitoring
   createNamespace: true
   valuesContent: |-
+    extraScrapeConfigs: |
+      # Henia operator metrics (cluster-substrate phase 7 / FR-270).
+      #
+      # A static job rather than the annotation-driven kubernetes-service-endpoints
+      # discovery, because kubebuilder v4 serves metrics behind authn/authz and that
+      # job cannot attach a per-target bearer token. The protection is deliberately
+      # NOT relaxed: the previous change's most severe finding was an
+      # unauthenticated metrics surface, and turning authn off here would reopen
+      # that class one change later. Prometheus authenticates with its own
+      # ServiceAccount token, authorised by the henia-metrics-reader ClusterRole
+      # via prometheus-henia-metrics-rbac.yaml in this directory - which is
+      # tracked, as of review finding F5. This comment previously asserted that
+      # binding while nothing in the repository created it.
+      - job_name: henia-operator
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [henia-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: henia-controller-manager-metrics-service
+            action: keep
+          # Keep ONLY the Service's named port. The endpoints role also
+          # discovers every declared container port that is not bound to an
+          # endpoint port, so the operator's :8081 health port arrived as a
+          # second target - scraped over https because the job says https,
+          # answered in plain HTTP because health is not the metrics endpoint,
+          # and permanently down. The Service exposes 8443 alone; targets
+          # invented from container ports carry no endpoint port name.
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: https
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
     alertmanager:
       enabled: false
     prometheus-pushgateway:

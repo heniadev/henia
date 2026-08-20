@@ -1,0 +1,11 @@
+apiVersion: henia.dev/v1alpha1
+kind: Herd
+metadata:
+  labels:
+    app.kubernetes.io/name: henia
+    app.kubernetes.io/managed-by: kustomize
+  name: herd-sample
+spec:
+  repositories:
+    - url: https://git.tobiko.kondi.net/kondi/henia.git
+      revision: main

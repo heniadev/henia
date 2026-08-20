@@ -1,0 +1,32 @@
+# Registry configuration for containerd (cluster-substrate phase 3).
+#
+# The endpoint is Harbor's in-cluster Service, NOT the public hostname. Pointing
+# at harbor.tachiko.kondi.net would send every image pull out to the public IP
+# and back through HAProxy, making pulls depend on ingress routing, DNS and the
+# host firewall — a path that works only because ingress traffic is DNATed onto
+# the forward chain and never meets the input chain's AS12912 rule. That is an
+# incidental property, not a designed one, and a future perimeter change would
+# silently break every pod start.
+#
+# containerd runs on the host and does not use cluster DNS, so the name is
+# resolved by an /etc/hosts entry pointing at the Service's ClusterIP. Traffic
+# then goes straight to the ClusterIP via kube-proxy. CAVEAT: that address is
+# stable for the Service's lifetime but not across a delete/recreate — if Harbor
+# is reinstalled, the hosts entry must be updated.
+#
+# No credentials here on purpose: pulls authenticate with the imagePullSecret
+# named by each workload, which keeps this file free of secrets and therefore
+# trackable in infra/tachiko/. For the operator that is `harbor-pull` in
+# henia-system, declared at config/manager/manager.yaml.
+#
+# This comment previously asserted the mechanism while no imagePullSecret
+# existed anywhere - the operator was running only because its image was
+# already in the node's containerd store. Implementation review F2.
+mirrors:
+  harbor-core.harbor.svc:
+    endpoint:
+      - "http://harbor-core.harbor.svc"
+configs:
+  harbor-core.harbor.svc:
+    tls:
+      insecure_skip_verify: true
