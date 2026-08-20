@@ -726,7 +726,7 @@ CRD version bump cannot be rolled back by `kubectl rollout undo`.
 
 #### Manual
 
-- [ ] 7.4 The operator's metrics are visible in the Prometheus UI
+- [x] 7.4 The operator's metrics are visible in the Prometheus UI — da23a3f
 
 ### Phase 8: Read-back (FR-085)
 
