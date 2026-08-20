@@ -1,9 +1,9 @@
 ---
 change_id: cluster-substrate
 title: Cluster substrate
-status: implementing
+status: implemented
 created: 2026-08-19
-updated: 2026-08-19
+updated: 2026-08-20
 archived_at:
 ---
 
