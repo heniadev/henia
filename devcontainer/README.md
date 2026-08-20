@@ -4,7 +4,7 @@
 > **Inherited document — verify before acting on it.** This file arrived with
 > the devcontainer tree, grafted from another project, and describes
 > infrastructure that does not exist in this repository: `deploy/`,
-> `scripts/`, `.pre-commit-config.yaml`, `.mcp.json`, `.githooks/`, a
+> `scripts/`, `.pre-commit-config.yaml`, `.githooks/`, a
 > Prisma/Vite/React Router application, `course/` lesson references, and
 > issue links to `kondi/shirabe.studio`. The sections on the container
 > itself, the network firewall, and Kubernetes access do match the scripts
@@ -193,7 +193,11 @@ queries) and **Context7** (live library docs — `resolve-library-id` →
 
 Both are registered project-wide in the repo's own `.mcp.json` (committed —
 it holds no secrets, only `${EXA_API_KEY}`/`${CONTEXT7_API_KEY}` references
-that Claude Code expands at runtime). To use your own key instead of the
+that Claude Code expands at runtime). That file was one of the absences this
+document's warning named; it was created on 2026-08-20, so the Exa and
+Context7 entries above are now true of this repository. The Sentry entry
+described below is **not** registered — there is no Sentry-instrumented
+application here to query. To use your own key instead of the
 shared anonymous/rate-limited tier, add it to `creds.yaml` (gitignored,
 same file as the git credentials above):
 
