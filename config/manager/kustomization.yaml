@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: harbor-core.harbor.svc/henia/henia-operator
-  newTag: fe5d1fb
+  newTag: 77c7c39

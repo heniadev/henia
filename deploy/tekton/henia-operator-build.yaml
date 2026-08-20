@@ -10,6 +10,19 @@
 # Started by hand — there is no webhook and no Trigger. Auto-deploy-on-merge is
 # S-03 `checks-and-reconcile`, not this change.
 ---
+# The identity PipelineRuns run under. Tracked because it carries no secret
+# VALUES — only the names of two Secrets created out-of-band (see README.md):
+# `gitea-auth` for the clone and `harbor-push` for the push.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tekton-build
+  namespace: default
+secrets:
+  - name: gitea-auth
+imagePullSecrets:
+  - name: harbor-push
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
